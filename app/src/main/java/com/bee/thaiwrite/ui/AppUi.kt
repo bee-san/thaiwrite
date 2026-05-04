@@ -12,10 +12,13 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,17 +28,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,6 +60,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,9 +72,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -81,9 +93,16 @@ import com.bee.thaiwrite.data.repo.ReviewPromptMode
 import com.bee.thaiwrite.ui.components.WritingCanvas
 import com.bee.thaiwrite.ui.components.rememberWritingPadState
 import com.bee.thaiwrite.ui.theme.Clay
+import com.bee.thaiwrite.ui.theme.Cloud as StudyCloud
+import com.bee.thaiwrite.ui.theme.CloudEdge as StudyCloudEdge
+import com.bee.thaiwrite.ui.theme.CoralDeep as StudyCoralDeep
 import com.bee.thaiwrite.ui.theme.Ink
+import com.bee.thaiwrite.ui.theme.Lavender as StudyLavender
+import com.bee.thaiwrite.ui.theme.LavenderTint as StudyLavenderTint
+import com.bee.thaiwrite.ui.theme.MintTint as StudyMintTint
 import com.bee.thaiwrite.ui.theme.Palm
 import com.bee.thaiwrite.ui.theme.Saffron
+import com.bee.thaiwrite.ui.theme.Slate as StudySlate
 import kotlinx.coroutines.launch
 
 @Composable
@@ -522,53 +541,86 @@ private fun LessonScreen(
     onPlayAudio: suspend (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(overview.lesson.title) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) { Text("Back") }
-                },
-            )
-        },
+    val accent = lessonAccent(overview.lesson.stage)
+    StudyScreenScaffold(
+        title = overview.lesson.title,
+        subtitle = overview.lesson.stage,
+        onBack = onBack,
     ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                Text(overview.lesson.description, style = MaterialTheme.typography.bodyLarge)
+                StudyHeroCard(
+                    label = overview.lesson.stage,
+                    title = overview.lesson.title,
+                    body = overview.lesson.description,
+                    accent = accent,
+                    badge = "${overview.masteredCount}/${overview.totalCount} stable",
+                    detail = if (overview.unlocked) {
+                        "${overview.dueCount} cards from this lesson are already circulating in review."
+                    } else {
+                        "This lesson stays locked until the previous batch is stable."
+                    },
+                )
             }
             items(overview.items) { item ->
-                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFCF7))) {
+                StudyPanel(
+                    borderColor = accent.copy(alpha = 0.16f),
+                    contentPadding = PaddingValues(18.dp),
+                ) {
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp),
+                            .fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(item.item.thai, style = MaterialTheme.typography.headlineMedium)
-                            Text(item.item.transliteration, style = MaterialTheme.typography.titleLarge)
-                            Text(item.item.english, style = MaterialTheme.typography.bodyMedium)
+                            StudyInlinePill(
+                                text = item.item.transliteration,
+                                tint = accent,
+                                background = accent.copy(alpha = 0.12f),
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(item.item.thai, style = MaterialTheme.typography.headlineMedium, color = Ink)
+                            Text(item.item.english, style = MaterialTheme.typography.bodyLarge, color = StudySlate)
+                            item.guide?.tip?.let { tip ->
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(tip, style = MaterialTheme.typography.bodyMedium, color = Clay)
+                            }
                         }
-                        IconButton(onClick = { scope.launch { onPlayAudio(item.item.audioText) } }) {
-                            Icon(Icons.Outlined.Headphones, contentDescription = "Play audio")
+                        IconButton(
+                            onClick = { scope.launch { onPlayAudio(item.item.audioText) } },
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(accent.copy(alpha = 0.12f)),
+                        ) {
+                            Icon(Icons.Outlined.Headphones, contentDescription = "Play audio", tint = accent)
                         }
                     }
                 }
             }
             item {
-                Button(
-                    onClick = onPractice,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = overview.unlocked,
-                ) {
-                    Text("Practice writing this lesson")
+                StudyPanel(borderColor = accent.copy(alpha = 0.16f)) {
+                    Text("Ready to write?", style = MaterialTheme.typography.titleLarge, color = Ink)
+                    Text(
+                        "Work through the prompts one by one, check each answer, and keep the handwriting clean.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = StudySlate,
+                    )
+                    Button(
+                        onClick = onPractice,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = overview.unlocked,
+                        shape = RoundedCornerShape(22.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = accent),
+                    ) {
+                        Text(if (overview.started) "Continue lesson drill" else "Start lesson drill")
+                    }
                 }
             }
         }
@@ -582,7 +634,7 @@ private fun PracticeScreen(
     onBack: () -> Unit,
 ) {
     var index by rememberSaveable { mutableIntStateOf(0) }
-    var showGuide by rememberSaveable { mutableStateOf(true) }
+    var showGuide by rememberSaveable { mutableStateOf(false) }
     var showHint by rememberSaveable { mutableStateOf(false) }
     var checking by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<WritingAssessment?>(null) }
@@ -590,21 +642,19 @@ private fun PracticeScreen(
     val scope = rememberCoroutineScope()
     val current = overview.items.getOrNull(index)
     val writingTarget = current?.item?.writingTarget()
+    val accent = lessonAccent(overview.lesson.stage)
 
     LaunchedEffect(index) {
         padState.clear()
         result = null
-        showGuide = true
+        showGuide = false
         showHint = false
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Practice ${overview.lesson.title}") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
-            )
-        },
+    StudyScreenScaffold(
+        title = overview.lesson.title,
+        subtitle = "Lesson drill",
+        onBack = onBack,
     ) { padding ->
         if (current == null) {
             Box(
@@ -613,78 +663,126 @@ private fun PracticeScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Lesson done.", style = MaterialTheme.typography.headlineMedium)
-                    Button(onClick = onBack) { Text("Return home") }
-                }
+                StudyCompletionCard(
+                    title = "Lesson complete",
+                    body = "You finished ${overview.lesson.title}. Leave now or run it again later if you want cleaner strokes.",
+                    buttonText = "Back to study",
+                    accent = accent,
+                    onClick = onBack,
+                )
             }
-            return@Scaffold
+            return@StudyScreenScaffold
         }
 
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(20.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Item ${index + 1} of ${overview.items.size}", style = MaterialTheme.typography.labelLarge, color = Palm)
-                    Text(current.item.prompt, style = MaterialTheme.typography.headlineMedium)
-                    writingTarget?.supportText?.let {
-                        Text(it, style = MaterialTheme.typography.bodyMedium, color = Clay)
-                    }
-                    if (showHint) {
-                        Text("Hint: ${current.item.transliteration}", style = MaterialTheme.typography.bodyLarge)
-                        current.guide?.tip?.let {
-                            Text(it, style = MaterialTheme.typography.bodyMedium, color = Clay)
-                        }
-                    }
-                }
-            }
-            item {
-                WritingCanvas(
-                    state = padState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(320.dp),
-                    guideText = writingTarget?.displayText ?: current.item.thai,
-                    showGuide = showGuide,
+                StudyHeroCard(
+                    label = "${overview.lesson.stage} practice",
+                    title = current.item.prompt,
+                    body = "Item ${index + 1} of ${overview.items.size}. ${if (showGuide) "Guide is visible so you can clean up the shape." else "Write from memory before you check it."}",
+                    accent = accent,
+                    badge = "${index + 1}/${overview.items.size}",
+                    detail = writingTarget?.supportText ?: "Write the Thai neatly, then let the recognizer score it.",
                 )
             }
             item {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = { padState.clear() }) { Text("Clear") }
-                    OutlinedButton(onClick = { showGuide = !showGuide }) { Text(if (showGuide) "Hide guide" else "Show guide") }
-                    OutlinedButton(onClick = { showHint = !showHint }) { Text(if (showHint) "Hide hint" else "Show hint") }
-                    OutlinedButton(onClick = { scope.launch { viewModel.playAudio(current.item.audioText) } }) { Text("Play audio") }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    StudyInlinePill(
+                        text = "${overview.items.size - index - 1} left",
+                        tint = accent,
+                        background = accent.copy(alpha = 0.12f),
+                    )
+                    StudyInlinePill(
+                        text = if (showGuide) "Guide on" else "Guide off",
+                        tint = Ink,
+                        background = StudyMintTint,
+                    )
+                    StudyInlinePill(
+                        text = if (showHint) "Hint open" else "Hint hidden",
+                        tint = if (showHint) Clay else StudySlate,
+                        background = if (showHint) Color(0xFFFFF1E4) else Color(0xFFF7F2EB),
+                    )
+                }
+            }
+            if (showHint) {
+                item {
+                    StudyPanel(borderColor = accent.copy(alpha = 0.16f)) {
+                        Text("Hint", style = MaterialTheme.typography.titleLarge, color = Ink)
+                        Text(current.item.transliteration, style = MaterialTheme.typography.bodyLarge, color = Ink)
+                        current.guide?.tip?.let { tip ->
+                            Text(tip, style = MaterialTheme.typography.bodyMedium, color = Clay)
+                        }
+                    }
                 }
             }
             item {
-                Button(
-                    enabled = !checking && !padState.isEmpty(),
-                    onClick = {
-                        checking = true
-                        scope.launch {
-                            runCatching {
-                                viewModel.assessWriting(
-                                    itemId = current.item.id,
-                                    acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
-                                    strokes = padState.strokes(),
-                                    canvasWidth = padState.canvasSize.width.toFloat(),
-                                    canvasHeight = padState.canvasSize.height.toFloat(),
-                                )
-                            }.onSuccess { assessment ->
-                                result = assessment
-                            }.onFailure { error ->
-                                viewModel.postMessage(error.message ?: "Unable to check your writing.")
-                            }
-                            checking = false
-                        }
-                    },
+                StudyCanvasPanel(
+                    title = if (showGuide) "Write over the guide or freehand" else "Write from memory",
+                    body = "Use the full height of the canvas. Clear and retry as often as you want before checking.",
+                    accent = accent,
                 ) {
-                    Text(if (checking) "Checking..." else "Check writing")
+                    WritingCanvas(
+                        state = padState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(320.dp),
+                        guideText = writingTarget?.displayText ?: current.item.thai,
+                        showGuide = showGuide,
+                    )
+                }
+            }
+            item {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = { padState.clear() }, shape = RoundedCornerShape(20.dp)) { Text("Clear canvas") }
+                    OutlinedButton(onClick = { showGuide = !showGuide }, shape = RoundedCornerShape(20.dp)) {
+                        Text(if (showGuide) "Hide guide" else "Show guide")
+                    }
+                    OutlinedButton(onClick = { showHint = !showHint }, shape = RoundedCornerShape(20.dp)) {
+                        Text(if (showHint) "Hide hint" else "Show hint")
+                    }
+                    OutlinedButton(onClick = { scope.launch { viewModel.playAudio(current.item.audioText) } }, shape = RoundedCornerShape(20.dp)) {
+                        Text("Play audio")
+                    }
+                }
+            }
+            if (result == null) {
+                item {
+                    Button(
+                        enabled = !checking && !padState.isEmpty(),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(22.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = accent),
+                        onClick = {
+                            checking = true
+                            scope.launch {
+                                runCatching {
+                                    viewModel.assessWriting(
+                                        itemId = current.item.id,
+                                        acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
+                                        strokes = padState.strokes(),
+                                        canvasWidth = padState.canvasSize.width.toFloat(),
+                                        canvasHeight = padState.canvasSize.height.toFloat(),
+                                    )
+                                }.onSuccess { assessment ->
+                                    result = assessment
+                                }.onFailure { error ->
+                                    viewModel.postMessage(error.message ?: "Unable to check your writing.")
+                                }
+                                checking = false
+                            }
+                        },
+                    ) {
+                        Text(if (checking) "Checking..." else "Check writing")
+                    }
                 }
             }
             result?.let { assessment ->
@@ -697,6 +795,9 @@ private fun PracticeScreen(
                 }
                 item {
                     Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(22.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (assessment.passed) Palm else accent),
                         onClick = {
                             if (assessment.passed) {
                                 index += 1
@@ -706,7 +807,7 @@ private fun PracticeScreen(
                             }
                         },
                     ) {
-                        Text(if (assessment.passed) "Next item" else "Try again")
+                        Text(if (assessment.passed) "Next item" else "Reset and try again")
                     }
                 }
             }
@@ -736,12 +837,15 @@ private fun ReviewScreen(
     val writingTarget = current?.item?.writingTarget()
     var revealed by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
     var showHint by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
+    var recallSubmitting by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
     val cardMode = current?.promptMode
+    val accent = current?.promptMode?.let(::reviewAccent) ?: Palm
 
     LaunchedEffect(current?.item?.id, current?.card?.cardType) {
         revealed = false
         showHint = false
         checking = false
+        recallSubmitting = false
         result = null
         padState.clear()
     }
@@ -752,13 +856,10 @@ private fun ReviewScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Due review") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
-            )
-        },
+    StudyScreenScaffold(
+        title = "Review queue",
+        subtitle = "Due now",
+        onBack = onBack,
     ) { padding ->
         if (current == null) {
             Box(
@@ -767,41 +868,64 @@ private fun ReviewScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Nothing due right now.", style = MaterialTheme.typography.headlineMedium)
+                StudyCompletionCard(
+                    title = "Queue clear",
+                    body = "Nothing is due right now. Leave the review screen and come back when the next batch surfaces.",
+                    buttonText = "Back to study",
+                    accent = Palm,
+                    onClick = onBack,
+                )
             }
-            return@Scaffold
+            return@StudyScreenScaffold
         }
 
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(20.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("${snapshot.dueCards.size} cards due", style = MaterialTheme.typography.labelLarge, color = Palm)
-                    Text(current.primaryPrompt, style = MaterialTheme.typography.headlineMedium)
-                    Text(
-                        when (current.promptMode) {
-                            ReviewPromptMode.RECOGNITION -> "Recognition card"
-                            ReviewPromptMode.WRITING -> "Writing card"
-                            ReviewPromptMode.AUDIO -> "Audio card"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Clay,
+                StudyHeroCard(
+                    label = reviewModeLabel(current.promptMode),
+                    title = current.primaryPrompt,
+                    body = reviewModeBody(current),
+                    accent = accent,
+                    badge = "${snapshot.dueCards.size} due",
+                    detail = if (current.requiresWriting) {
+                        writingTarget?.supportText ?: "Write the Thai answer before you check it."
+                    } else {
+                        "Reveal only after you have genuinely tried to recall it."
+                    },
+                )
+            }
+            item {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    StudyInlinePill(
+                        text = "${snapshot.dueRecognitionCount} recall",
+                        tint = Palm,
+                        background = StudyMintTint,
+                    )
+                    StudyInlinePill(
+                        text = "${snapshot.dueWritingCount} writing",
+                        tint = Saffron,
+                        background = Color(0xFFFFF1E4),
+                    )
+                    StudyInlinePill(
+                        text = "${snapshot.dueAudioCount} audio",
+                        tint = StudyLavender,
+                        background = StudyLavenderTint,
                     )
                     if (current.requiresWriting) {
-                        writingTarget?.supportText?.let {
-                            Text(it, style = MaterialTheme.typography.bodyMedium, color = Clay)
-                        }
-                    }
-                    if (current.requiresWriting && showHint) {
-                        Text(current.secondaryPrompt, style = MaterialTheme.typography.bodyLarge)
-                        current.guide?.tip?.let {
-                            Text(it, style = MaterialTheme.typography.bodyMedium, color = Clay)
-                        }
+                        StudyInlinePill(
+                            text = if (revealed) "Guide shown" else "Guide hidden",
+                            tint = Ink,
+                            background = Color(0xFFF7F2EB),
+                        )
                     }
                 }
             }
@@ -810,57 +934,84 @@ private fun ReviewScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    IconButton(onClick = { scope.launch { viewModel.playAudio(current.item.audioText) } }) {
-                        Icon(Icons.Outlined.Headphones, contentDescription = "Play audio")
+                    OutlinedButton(
+                        onClick = { scope.launch { viewModel.playAudio(current.item.audioText) } },
+                        shape = RoundedCornerShape(20.dp),
+                    ) {
+                        Text(if (current.promptMode == ReviewPromptMode.AUDIO) "Replay prompt" else "Play audio")
                     }
                     if (current.requiresWriting) {
-                        OutlinedButton(onClick = { showHint = !showHint }) {
+                        OutlinedButton(onClick = { showHint = !showHint }, shape = RoundedCornerShape(20.dp)) {
                             Text(if (showHint) "Hide hint" else "Show hint")
+                        }
+                    }
+                }
+            }
+            if (current.requiresWriting && showHint) {
+                item {
+                    StudyPanel(borderColor = accent.copy(alpha = 0.16f)) {
+                        Text("Hint", style = MaterialTheme.typography.titleLarge, color = Ink)
+                        Text(current.secondaryPrompt, style = MaterialTheme.typography.bodyLarge, color = Ink)
+                        current.guide?.tip?.let {
+                            Text(it, style = MaterialTheme.typography.bodyMedium, color = Clay)
                         }
                     }
                 }
             }
             if (current.requiresWriting) {
                 item {
-                    WritingCanvas(
-                        state = padState,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(320.dp),
-                        guideText = writingTarget?.displayText ?: current.item.thai,
-                        showGuide = revealed,
-                    )
-                }
-                item {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(onClick = { padState.clear() }) { Text("Clear") }
-                        OutlinedButton(onClick = { revealed = !revealed }) { Text(if (revealed) "Hide guide" else "Show guide") }
+                    StudyCanvasPanel(
+                        title = if (revealed) "Guide overlay is visible" else "Write before you reveal the guide",
+                        body = "Keep the answer hidden until you need it. The goal is recall first, then cleanup.",
+                        accent = accent,
+                    ) {
+                        WritingCanvas(
+                            state = padState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(320.dp),
+                            guideText = writingTarget?.displayText ?: current.item.thai,
+                            showGuide = revealed,
+                        )
                     }
                 }
                 item {
-                    Button(
-                        enabled = !checking && !padState.isEmpty(),
-                        onClick = {
-                            checking = true
-                            scope.launch {
-                                runCatching {
-                                    viewModel.assessWriting(
-                                        itemId = current.item.id,
-                                        acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
-                                        strokes = padState.strokes(),
-                                        canvasWidth = padState.canvasSize.width.toFloat(),
-                                        canvasHeight = padState.canvasSize.height.toFloat(),
-                                    )
-                                }.onSuccess { assessment ->
-                                    result = assessment
-                                }.onFailure { error ->
-                                    viewModel.postMessage(error.message ?: "Unable to check your writing.")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = { padState.clear() }, shape = RoundedCornerShape(20.dp)) { Text("Clear canvas") }
+                        OutlinedButton(onClick = { revealed = !revealed }, shape = RoundedCornerShape(20.dp)) {
+                            Text(if (revealed) "Hide guide" else "Show guide")
+                        }
+                    }
+                }
+                if (result == null) {
+                    item {
+                        Button(
+                            enabled = !checking && !padState.isEmpty(),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(22.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = accent),
+                            onClick = {
+                                checking = true
+                                scope.launch {
+                                    runCatching {
+                                        viewModel.assessWriting(
+                                            itemId = current.item.id,
+                                            acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
+                                            strokes = padState.strokes(),
+                                            canvasWidth = padState.canvasSize.width.toFloat(),
+                                            canvasHeight = padState.canvasSize.height.toFloat(),
+                                        )
+                                    }.onSuccess { assessment ->
+                                        result = assessment
+                                    }.onFailure { error ->
+                                        viewModel.postMessage(error.message ?: "Unable to check your writing.")
+                                    }
+                                    checking = false
                                 }
-                                checking = false
-                            }
-                        },
-                    ) {
-                        Text(if (checking) "Checking..." else "Check answer")
+                            },
+                        ) {
+                            Text(if (checking) "Checking..." else "Check answer")
+                        }
                     }
                 }
                 result?.let { assessment ->
@@ -872,24 +1023,34 @@ private fun ReviewScreen(
                         )
                     }
                     item {
-                        TextButton(onClick = {
-                            result = null
-                            padState.clear()
-                        }) { Text("Continue") }
+                        Button(
+                            onClick = {
+                                result = null
+                                padState.clear()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(22.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = if (assessment.passed) Palm else accent),
+                        ) {
+                            Text(if (assessment.passed) "Next card" else "Reset and try again")
+                        }
                     }
                 }
             } else {
                 item {
-                    ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFFFFBF4))) {
-                        Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StudyPanel(
+                        borderColor = accent.copy(alpha = 0.16f),
+                        contentPadding = PaddingValues(24.dp),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             if (revealed) {
                                 Text(
                                     current.item.thai,
                                     style = MaterialTheme.typography.headlineLarge,
                                     color = Ink,
                                 )
-                                Text(current.item.transliteration, style = MaterialTheme.typography.titleLarge)
-                                Text(current.item.english, style = MaterialTheme.typography.bodyLarge)
+                                Text(current.item.transliteration, style = MaterialTheme.typography.titleLarge, color = accent)
+                                Text(current.item.english, style = MaterialTheme.typography.bodyLarge, color = StudySlate)
                             } else {
                                 Text(
                                     if (current.promptMode == ReviewPromptMode.AUDIO) {
@@ -912,13 +1073,42 @@ private fun ReviewScreen(
                 }
                 item {
                     if (!revealed) {
-                        Button(onClick = { revealed = true }) {
+                        Button(
+                            onClick = { revealed = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(22.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = accent),
+                        ) {
                             Text(if (current.promptMode == ReviewPromptMode.AUDIO) "Reveal answer" else "Reveal")
                         }
                     } else {
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = { viewModel.recordRecallReview(current.item.id, current.card.cardType, false) }) { Text("Fail") }
-                            Button(onClick = { viewModel.recordRecallReview(current.item.id, current.card.cardType, true) }) { Text("Pass") }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    recallSubmitting = true
+                                    viewModel.recordRecallReview(current.item.id, current.card.cardType, false)
+                                },
+                                enabled = !recallSubmitting,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(22.dp),
+                            ) {
+                                Text("Missed it")
+                            }
+                            Button(
+                                onClick = {
+                                    recallSubmitting = true
+                                    viewModel.recordRecallReview(current.item.id, current.card.cardType, true)
+                                },
+                                enabled = !recallSubmitting,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(22.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = accent),
+                            ) {
+                                Text("Got it")
+                            }
                         }
                     }
                 }
@@ -1169,20 +1359,237 @@ private fun notificationPermissionGranted(context: Context): Boolean {
 }
 
 @Composable
+private fun StudyScreenScaffold(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+    content: @Composable (PaddingValues) -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color(0xFFFFFBF6), Color(0xFFF4F8F7), Color(0xFFFFF8F0)),
+                ),
+            ),
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(subtitle, style = MaterialTheme.typography.labelLarge, color = StudySlate)
+                            Text(title, style = MaterialTheme.typography.titleLarge, color = Ink)
+                        }
+                    },
+                    navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                )
+            },
+        ) { padding ->
+            content(padding)
+        }
+    }
+}
+
+@Composable
+private fun StudyHeroCard(
+    label: String,
+    title: String,
+    body: String,
+    accent: Color,
+    badge: String,
+    detail: String,
+) {
+    Surface(
+        shape = RoundedCornerShape(30.dp),
+        color = Ink,
+        shadowElevation = 10.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                StudyInlinePill(
+                    text = label,
+                    tint = accent,
+                    background = accent.copy(alpha = 0.18f),
+                )
+                StudyInlinePill(
+                    text = badge,
+                    tint = Color.White,
+                    background = Color.White.copy(alpha = 0.12f),
+                )
+            }
+            Text(title, style = MaterialTheme.typography.headlineMedium, color = Color.White)
+            Text(body, style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.92f))
+            Text(detail, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.74f))
+        }
+    }
+}
+
+@Composable
+private fun StudyPanel(
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(20.dp),
+    borderColor: Color = StudyCloudEdge,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = StudyCloud),
+        border = BorderStroke(1.dp, borderColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(contentPadding),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun StudyInlinePill(
+    text: String,
+    tint: Color,
+    background: Color,
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = background,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = tint,
+        )
+    }
+}
+
+@Composable
+private fun StudyCanvasPanel(
+    title: String,
+    body: String,
+    accent: Color,
+    content: @Composable () -> Unit,
+) {
+    StudyPanel(borderColor = accent.copy(alpha = 0.16f)) {
+        Text(title, style = MaterialTheme.typography.titleLarge, color = Ink)
+        Text(body, style = MaterialTheme.typography.bodyMedium, color = StudySlate)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(26.dp))
+                .border(BorderStroke(1.dp, accent.copy(alpha = 0.18f)), RoundedCornerShape(26.dp)),
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun StudyCompletionCard(
+    title: String,
+    body: String,
+    buttonText: String,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    StudyPanel(
+        modifier = Modifier.padding(horizontal = 20.dp),
+        borderColor = accent.copy(alpha = 0.16f),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(accent.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.LocalFireDepartment,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(36.dp),
+            )
+        }
+        Text(title, style = MaterialTheme.typography.headlineMedium, color = Ink)
+        Text(body, style = MaterialTheme.typography.bodyLarge, color = StudySlate)
+        Button(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = accent),
+        ) {
+            Text(buttonText)
+        }
+    }
+}
+
+private fun lessonAccent(stage: String): Color = when (stage) {
+    "Consonants" -> Palm
+    "Vowels" -> Saffron
+    "Tone marks" -> StudyLavender
+    "Words" -> StudyCoralDeep
+    else -> Palm
+}
+
+private fun reviewAccent(mode: ReviewPromptMode): Color = when (mode) {
+    ReviewPromptMode.RECOGNITION -> Palm
+    ReviewPromptMode.WRITING -> Saffron
+    ReviewPromptMode.AUDIO -> StudyLavender
+}
+
+private fun reviewModeLabel(mode: ReviewPromptMode): String = when (mode) {
+    ReviewPromptMode.RECOGNITION -> "Recall card"
+    ReviewPromptMode.WRITING -> "Writing card"
+    ReviewPromptMode.AUDIO -> "Audio card"
+}
+
+private fun reviewModeBody(card: com.bee.thaiwrite.data.repo.ReviewCardView): String = when (card.promptMode) {
+    ReviewPromptMode.RECOGNITION ->
+        "Try to recall the Thai before revealing it. Score yourself only after you have genuinely tried."
+    ReviewPromptMode.WRITING ->
+        "Write the Thai from memory first. Reveal the guide only if you need a correction pass."
+    ReviewPromptMode.AUDIO ->
+        "Listen, say it back, and picture the Thai before flipping the answer."
+}
+
+@Composable
 private fun FeedbackCard(
     passed: Boolean,
     expected: String,
     topCandidate: String?,
 ) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (passed) Color(0xFFE7F4E4) else Color(0xFFFCE7E3),
-        ),
+    StudyPanel(
+        borderColor = if (passed) Palm.copy(alpha = 0.2f) else Clay.copy(alpha = 0.2f),
+        contentPadding = PaddingValues(18.dp),
     ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(if (passed) "Pass" else "Try again", style = MaterialTheme.typography.titleLarge, color = if (passed) Palm else Clay)
-            Text("Expected: $expected", style = MaterialTheme.typography.bodyLarge)
-            Text("Recognizer heard: ${topCandidate ?: "Nothing clear"}", style = MaterialTheme.typography.bodyMedium)
-        }
+        StudyInlinePill(
+            text = if (passed) "Recognized" else "Needs another pass",
+            tint = if (passed) Palm else Clay,
+            background = if (passed) Color(0xFFE7F4E4) else Color(0xFFFCE7E3),
+        )
+        Text(
+            if (passed) "That answer is good enough to move on." else "The recognizer did not get a clean match yet.",
+            style = MaterialTheme.typography.titleLarge,
+            color = Ink,
+        )
+        Text("Expected: $expected", style = MaterialTheme.typography.bodyLarge, color = Ink)
+        Text(
+            "Recognizer heard: ${topCandidate ?: "Nothing clear"}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = StudySlate,
+        )
     }
 }
