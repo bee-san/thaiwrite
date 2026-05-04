@@ -92,3 +92,21 @@ Relevant workflows:
 
 - [ci.yml](.github/workflows/ci.yml)
 - [release.yml](.github/workflows/release.yml)
+
+`ci.yml` now does three things on pushes, PRs, and manual runs:
+
+- runs unit tests
+- builds a debug APK
+- builds a release-candidate APK and uploads both APK outputs as workflow artifacts
+
+`release.yml` publishes signed APKs to GitHub Releases:
+
+- automatically on pushed tags like `v0.1.1`
+- manually from the Actions tab with a required tag input such as `v0.1.1`
+
+The release workflow also uploads these extra assets:
+
+- `app-release.apk`
+- `app-release.apk.sha256`
+- ProGuard/R8 `mapping.txt`
+- `output-metadata.json`

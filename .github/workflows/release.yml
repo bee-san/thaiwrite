@@ -5,9 +5,37 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release, for example v0.1.1"
+        required: true
+        type: string
+      release_name:
+        description: "Optional release title override"
+        required: false
+        type: string
+      prerelease:
+        description: "Mark this GitHub release as a prerelease"
+        required: false
+        default: false
+        type: boolean
+      draft:
+        description: "Create the GitHub release as a draft"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref_name || github.event.inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  JAVA_VERSION: "17"
+  ANDROID_COMPILE_SDK: "36"
+  ANDROID_BUILD_TOOLS: "36.0.0"
 
 jobs:
   release:
@@ -24,16 +52,54 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+        run: sdkmanager "platforms;android-${{ env.ANDROID_COMPILE_SDK }}" "build-tools;${{ env.ANDROID_BUILD_TOOLS }}" "platform-tools"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            TAG="${{ github.event.inputs.tag }}"
+            DRAFT="${{ github.event.inputs.draft }}"
+            PRERELEASE="${{ github.event.inputs.prerelease }}"
+            RELEASE_NAME="${{ github.event.inputs.release_name }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            DRAFT="false"
+            PRERELEASE="false"
+            RELEASE_NAME=""
+          fi
+
+          if [[ -z "${TAG}" ]]; then
+            echo "A tag is required to publish a release." >&2
+            exit 1
+          fi
+          if [[ "${TAG}" != v* ]]; then
+            echo "Release tag must start with v, got ${TAG}." >&2
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          if [[ -z "${RELEASE_NAME}" ]]; then
+            RELEASE_NAME="ThaiWrite ${VERSION}"
+          fi
+
+          {
+            echo "tag=${TAG}"
+            echo "version=${VERSION}"
+            echo "release_name=${RELEASE_NAME}"
+            echo "draft=${DRAFT}"
+            echo "prerelease=${PRERELEASE}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Verify signing secrets
         env:
@@ -60,22 +126,39 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          GRADLE_ARGS=()
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
-            GRADLE_ARGS+=("-Pthaiwrite.versionName=${GITHUB_REF_NAME#v}")
-          fi
-          GRADLE_ARGS+=("-Pthaiwrite.githubOwner=${{ github.repository_owner }}")
-          GRADLE_ARGS+=("-Pthaiwrite.githubRepo=${{ github.event.repository.name }}")
-          ./gradlew "${GRADLE_ARGS[@]}" :app:assembleRelease
+          ./gradlew \
+            -Pthaiwrite.versionName=${{ steps.meta.outputs.version }} \
+            -Pthaiwrite.githubOwner=${{ github.repository_owner }} \
+            -Pthaiwrite.githubRepo=${{ github.event.repository.name }} \
+            :app:assembleRelease
 
       - name: Generate APK checksum
         run: |
           sha256sum app/build/outputs/apk/release/app-release.apk > app/build/outputs/apk/release/app-release.apk.sha256
 
+      - name: Upload release build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: thaiwrite-release-${{ steps.meta.outputs.tag }}
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/release/app-release.apk.sha256
+            app/build/outputs/mapping/release/mapping.txt
+            app/build/outputs/apk/release/output-metadata.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Publish release APK
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.release_name }}
+          draft: ${{ steps.meta.outputs.draft == 'true' }}
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          generate_release_notes: true
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/release/app-release.apk.sha256
+            app/build/outputs/mapping/release/mapping.txt
+            app/build/outputs/apk/release/output-metadata.json
           fail_on_unmatched_files: true

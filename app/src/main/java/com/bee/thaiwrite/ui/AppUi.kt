@@ -108,6 +108,8 @@ fun ThaiWriteApp(viewModel: AppViewModel) {
                 OnboardingScreen(
                     uiState = uiState,
                     onDownloadModel = viewModel::downloadHandwritingModel,
+                    onOpenThaiAudioSetup = viewModel::openThaiAudioSetup,
+                    onRefreshSupportState = viewModel::refreshSupportState,
                     onFinish = viewModel::finishOnboarding,
                     snackbarHostState = snackbarHostState,
                 )
@@ -139,6 +141,8 @@ private fun LoadingScreen() {
 private fun OnboardingScreen(
     uiState: AppUiState,
     onDownloadModel: (Boolean) -> Unit,
+    onOpenThaiAudioSetup: () -> Unit,
+    onRefreshSupportState: () -> Unit,
     onFinish: (Int, Int) -> Unit,
     snackbarHostState: SnackbarHostState,
 ) {
@@ -191,10 +195,21 @@ private fun OnboardingScreen(
             item {
                 FeatureCard(
                     title = "Audio cards",
-                    body = if (uiState.thaiAudioReady) {
-                        "Thai TextToSpeech is available on this device."
-                    } else {
-                        "Thai audio depends on Android TextToSpeech voice data. Install Thai voice data if playback fails."
+                    body = uiState.thaiAudioStatus,
+                    action = {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            if (!uiState.thaiAudioReady) {
+                                OutlinedButton(onClick = onOpenThaiAudioSetup) {
+                                    Text("Fix audio")
+                                }
+                            }
+                            TextButton(onClick = onRefreshSupportState) {
+                                Text("Refresh")
+                            }
+                        }
                     },
                 )
             }
@@ -246,6 +261,22 @@ private fun StudyNavHost(
 ) {
     val snapshot = uiState.snapshot ?: return
     val navController = rememberNavController()
+    fun openStudyFlow() {
+        when {
+            snapshot.dueCards.isNotEmpty() -> navController.navigate("review")
+            snapshot.nextLessonId != null -> {
+                val lessonId = snapshot.nextLessonId
+                val lesson = snapshot.lessons.firstOrNull { it.lesson.id == lessonId }
+                if (lesson?.started == true) {
+                    viewModel.startLesson(lessonId)
+                    navController.navigate("practice/$lessonId")
+                } else {
+                    navController.navigate("lesson/$lessonId")
+                }
+            }
+            else -> navController.navigate(MainDestination.Words.route)
+        }
+    }
     fun navigateTopLevel(destination: MainDestination) {
         navController.navigate(destination.route) {
             launchSingleTop = true
@@ -264,8 +295,10 @@ private fun StudyNavHost(
                 uiState = uiState,
                 selected = MainDestination.Home,
                 onNavigate = ::navigateTopLevel,
+                onOpenStudy = ::openStudyFlow,
                 onOpenLesson = { lessonId -> navController.navigate("lesson/$lessonId") },
                 onOpenLibrary = { navigateTopLevel(MainDestination.Words) },
+                onOpenThaiAudioSetup = viewModel::openThaiAudioSetup,
                 onCheckUpdates = { viewModel.refreshUpdateState(manual = true) },
                 onInstallUpdate = viewModel::downloadAndInstallUpdate,
                 onOpenUpdatePage = viewModel::openUpdatePage,
@@ -278,7 +311,7 @@ private fun StudyNavHost(
                 uiState = uiState,
                 selected = MainDestination.Practice,
                 onNavigate = ::navigateTopLevel,
-                onOpenReview = { navController.navigate("review") },
+                onOpenStudy = ::openStudyFlow,
                 onOpenLesson = { lessonId -> navController.navigate("lesson/$lessonId") },
                 snackbarHostState = snackbarHostState,
             )
@@ -300,6 +333,8 @@ private fun StudyNavHost(
                 onNavigate = ::navigateTopLevel,
                 onReminderSelected = viewModel::updateReminder,
                 onRedownloadModel = viewModel::downloadHandwritingModel,
+                onOpenThaiAudioSetup = viewModel::openThaiAudioSetup,
+                onRefreshSupportState = viewModel::refreshSupportState,
                 onCheckUpdates = { viewModel.refreshUpdateState(manual = true) },
                 onInstallUpdate = viewModel::downloadAndInstallUpdate,
                 onOpenUpdatePage = viewModel::openUpdatePage,
