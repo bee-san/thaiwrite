@@ -1,0 +1,124 @@
+{
+  "lessons": [
+    {
+      "id": "consonants_1",
+      "order": 1,
+      "stage": "Consonants",
+      "title": "First anchor letters",
+      "description": "Start with four common shapes and learn how Thai letters sit on the baseline.",
+      "itemIds": ["ko_kai", "kho_khai", "ngo_ngu", "cho_chan"]
+    },
+    {
+      "id": "consonants_2",
+      "order": 2,
+      "stage": "Consonants",
+      "title": "Breathy contrasts",
+      "description": "Add related kh-series consonants and feel the difference between paired sounds.",
+      "itemIds": ["kho_khuat", "kho_khwai", "kho_khon", "kho_rakhang"]
+    },
+    {
+      "id": "consonants_3",
+      "order": 3,
+      "stage": "Consonants",
+      "title": "Ch-group foundations",
+      "description": "Build out the first big consonant family used in many beginner words.",
+      "itemIds": ["cho_ching", "cho_chang", "so_so", "cho_choe"]
+    },
+    {
+      "id": "consonants_4",
+      "order": 4,
+      "stage": "Consonants",
+      "title": "Voiced and nasal forms",
+      "description": "Learn the letters that often appear in names and daily vocabulary.",
+      "itemIds": ["yo_ying", "do_chada", "to_patak", "tho_than"]
+    },
+    {
+      "id": "consonants_5",
+      "order": 5,
+      "stage": "Consonants",
+      "title": "Rare historic forms",
+      "description": "Keep moving through the official alphabet, even the letters you will read less often.",
+      "itemIds": ["tho_montho", "tho_phuthao", "no_nen", "do_dek"]
+    },
+    {
+      "id": "consonants_6",
+      "order": 6,
+      "stage": "Consonants",
+      "title": "The t and th block",
+      "description": "These shapes recur constantly, so get precise with them early.",
+      "itemIds": ["to_tao", "tho_thung", "tho_thahan", "tho_thong"]
+    },
+    {
+      "id": "consonants_7",
+      "order": 7,
+      "stage": "Consonants",
+      "title": "N, B, P and friends",
+      "description": "Useful high-frequency consonants for real words and family names.",
+      "itemIds": ["no_nu", "bo_baimai", "po_pla", "pho_phueng"]
+    },
+    {
+      "id": "consonants_8",
+      "order": 8,
+      "stage": "Consonants",
+      "title": "F and Ph forms",
+      "description": "Finish the bilabial block and get ready for whole-word practice.",
+      "itemIds": ["fo_fa", "pho_phan", "fo_fan", "pho_samphao"]
+    },
+    {
+      "id": "consonants_9",
+      "order": 9,
+      "stage": "Consonants",
+      "title": "Flow letters",
+      "description": "These smooth shapes show up everywhere in reading and writing.",
+      "itemIds": ["mo_ma", "yo_yak", "ro_ruea", "lo_ling"]
+    },
+    {
+      "id": "consonants_10",
+      "order": 10,
+      "stage": "Consonants",
+      "title": "Sibilants and aspirates",
+      "description": "Finish the consonant inventory with the final common symbol families.",
+      "itemIds": ["wo_waen", "so_sala", "so_ruesi", "so_suea"]
+    },
+    {
+      "id": "consonants_11",
+      "order": 11,
+      "stage": "Consonants",
+      "title": "Final consonants",
+      "description": "Close out the official alphabet before moving into vowels and tones.",
+      "itemIds": ["ho_hip", "lo_chula", "o_ang", "ho_nokhuk"]
+    },
+    {
+      "id": "vowels_1",
+      "order": 12,
+      "stage": "Vowels",
+      "title": "Basic vowel marks",
+      "description": "Meet the most practical vowel symbols you need to start reading words.",
+      "itemIds": ["sara_aa", "sara_i", "sara_ii", "sara_u"]
+    },
+    {
+      "id": "vowels_2",
+      "order": 13,
+      "stage": "Vowels",
+      "title": "Front vowels",
+      "description": "Add the vowels that wrap around the consonant frame.",
+      "itemIds": ["sara_uu", "sara_e", "sara_ae", "sara_o"]
+    },
+    {
+      "id": "tones_1",
+      "order": 14,
+      "stage": "Tone marks",
+      "title": "Tone marks",
+      "description": "See and write the four tone marks before they appear in vocabulary.",
+      "itemIds": ["mai_ek", "mai_tho", "mai_tri", "mai_chattawa"]
+    },
+    {
+      "id": "words_1",
+      "order": 15,
+      "stage": "Words",
+      "title": "Loved names and useful words",
+      "description": "A tiny starter set of names and words to connect the alphabet to memory.",
+      "itemIds": ["mae", "pho", "yai", "maeo", "ban", "nam", "chai", "na", "beam", "ann"]
+    }
+  ]
+}
