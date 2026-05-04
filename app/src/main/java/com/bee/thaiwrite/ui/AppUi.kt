@@ -114,7 +114,9 @@ import kotlinx.coroutines.launch
 
 private enum class WritingGuidanceStage {
     TRACE,
-    FADE,
+    FADE_ALL,
+    FEWER_STROKES,
+    FIRST_STROKE,
     CHECK,
 }
 
@@ -125,20 +127,69 @@ private fun WritingGuidanceStage.showsGuide(): Boolean = this != WritingGuidance
 
 private fun WritingGuidanceStage.label(): String = when (this) {
     WritingGuidanceStage.TRACE -> "Trace"
-    WritingGuidanceStage.FADE -> "Fade"
+    WritingGuidanceStage.FADE_ALL -> "Faint guide"
+    WritingGuidanceStage.FEWER_STROKES -> "Fewer strokes"
+    WritingGuidanceStage.FIRST_STROKE -> "Start cue"
     WritingGuidanceStage.CHECK -> "Check"
 }
 
-private fun WritingGuidanceStage.next(): WritingGuidanceStage = when (this) {
-    WritingGuidanceStage.TRACE -> WritingGuidanceStage.FADE
-    WritingGuidanceStage.FADE -> WritingGuidanceStage.CHECK
+private fun WritingGuidanceStage.next(guideStrokeCount: Int): WritingGuidanceStage = when (this) {
+    WritingGuidanceStage.TRACE -> WritingGuidanceStage.FADE_ALL
+    WritingGuidanceStage.FADE_ALL -> when {
+        guideStrokeCount >= 3 -> WritingGuidanceStage.FEWER_STROKES
+        guideStrokeCount == 2 -> WritingGuidanceStage.FIRST_STROKE
+        else -> WritingGuidanceStage.CHECK
+    }
+    WritingGuidanceStage.FEWER_STROKES -> WritingGuidanceStage.FIRST_STROKE
+    WritingGuidanceStage.FIRST_STROKE -> WritingGuidanceStage.CHECK
     WritingGuidanceStage.CHECK -> WritingGuidanceStage.CHECK
 }
 
 private fun WritingGuidanceStage.toGuideMode(): WritingGuideMode = when (this) {
     WritingGuidanceStage.TRACE -> WritingGuideMode.Trace
-    WritingGuidanceStage.FADE -> WritingGuideMode.Fade
+    WritingGuidanceStage.FADE_ALL,
+    WritingGuidanceStage.FEWER_STROKES,
+    WritingGuidanceStage.FIRST_STROKE,
+    -> WritingGuideMode.Fade
     WritingGuidanceStage.CHECK -> WritingGuideMode.Hidden
+}
+
+private fun WritingStrokeGuide?.drawableStrokeCount(): Int =
+    this?.strokes.orEmpty().count { it.points.isNotEmpty() }
+
+private fun WritingGuidanceStage.visibleGuideStrokeCount(strokeGuide: WritingStrokeGuide?): Int? {
+    val strokeCount = strokeGuide.drawableStrokeCount()
+    if (strokeCount == 0) return null
+    return when (this) {
+        WritingGuidanceStage.TRACE,
+        WritingGuidanceStage.FADE_ALL,
+        WritingGuidanceStage.CHECK,
+        -> null
+        WritingGuidanceStage.FEWER_STROKES -> {
+            val hiddenCount = (strokeCount / 3).coerceAtLeast(1)
+            (strokeCount - hiddenCount).coerceIn(1, strokeCount)
+        }
+        WritingGuidanceStage.FIRST_STROKE -> 1
+    }
+}
+
+private fun WritingGuidanceStage.guideOpacityMultiplier(): Float = when (this) {
+    WritingGuidanceStage.TRACE -> 1f
+    WritingGuidanceStage.FADE_ALL -> 0.85f
+    WritingGuidanceStage.FEWER_STROKES -> 0.72f
+    WritingGuidanceStage.FIRST_STROKE -> 0.55f
+    WritingGuidanceStage.CHECK -> 0f
+}
+
+private fun stageAdvanceButtonText(
+    stage: WritingGuidanceStage,
+    guideStrokeCount: Int,
+): String = when (stage.next(guideStrokeCount)) {
+    WritingGuidanceStage.TRACE -> "Trace"
+    WritingGuidanceStage.FADE_ALL -> "Fade guide"
+    WritingGuidanceStage.FEWER_STROKES -> "Take away strokes"
+    WritingGuidanceStage.FIRST_STROKE -> "First stroke only"
+    WritingGuidanceStage.CHECK -> "Clear and check"
 }
 
 @Composable
@@ -732,6 +783,7 @@ private fun PracticeScreen(
     val guideTip = current?.guide?.tip
     val supportTip = guideTip ?: current?.item?.teachingNote
     val strokeGuide = current?.guide?.strokeGuide?.toWritingStrokeGuide()
+    val guideStrokeCount = strokeGuide.drawableStrokeCount()
 
     fun movePracticeStage(nextStage: WritingGuidanceStage) {
         if (nextStage == guidanceStage) {
@@ -839,7 +891,7 @@ private fun PracticeScreen(
                     },
                     accent = accent,
                     badge = "${index + 1}/${overview.items.size}",
-                    detail = writingTarget?.supportText ?: supportTip ?: "Trace, fade, then check a fresh attempt.",
+                    detail = writingTarget?.supportText ?: supportTip ?: "Trace, fade, remove cues, then check a fresh attempt.",
                 )
             }
             item {
@@ -917,6 +969,8 @@ private fun PracticeScreen(
                         showGuide = guideVisible,
                         guideMode = guidanceStage.toGuideMode(),
                         strokeGuide = strokeGuide,
+                        visibleGuideStrokeCount = guidanceStage.visibleGuideStrokeCount(strokeGuide),
+                        guideOpacityMultiplier = guidanceStage.guideOpacityMultiplier(),
                     )
                 }
             }
@@ -932,11 +986,11 @@ private fun PracticeScreen(
                         }
                     } else {
                         Button(
-                            onClick = { movePracticeStage(guidanceStage.next()) },
+                            onClick = { movePracticeStage(guidanceStage.next(guideStrokeCount)) },
                             shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = accent),
                         ) {
-                            Text(if (guidanceStage.next() == WritingGuidanceStage.CHECK) "Clear and check" else "Fade guide")
+                            Text(stageAdvanceButtonText(guidanceStage, guideStrokeCount))
                         }
                     }
                     OutlinedButton(onClick = { showHint = !showHint }, shape = RoundedCornerShape(20.dp)) {
@@ -1162,6 +1216,7 @@ private fun ReviewScreen(
     val guideTip = current?.guide?.tip
     val supportTip = guideTip ?: current?.item?.teachingNote
     val strokeGuide = current?.guide?.strokeGuide?.toWritingStrokeGuide()
+    val guideStrokeCount = strokeGuide.drawableStrokeCount()
     var revealed by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
     var guidanceStage by rememberSaveable(current?.item?.id, current?.card?.cardType, current?.card?.state) {
         mutableStateOf(initialWritingGuidanceStage(current?.card?.state))
@@ -1354,6 +1409,8 @@ private fun ReviewScreen(
                             showGuide = guideVisible,
                             guideMode = guidanceStage.toGuideMode(),
                             strokeGuide = strokeGuide,
+                            visibleGuideStrokeCount = guidanceStage.visibleGuideStrokeCount(strokeGuide),
+                            guideOpacityMultiplier = guidanceStage.guideOpacityMultiplier(),
                         )
                     }
                 }
@@ -1369,11 +1426,11 @@ private fun ReviewScreen(
                             }
                         } else {
                             Button(
-                                onClick = { moveReviewStage(guidanceStage.next()) },
+                                onClick = { moveReviewStage(guidanceStage.next(guideStrokeCount)) },
                                 shape = RoundedCornerShape(20.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = accent),
                             ) {
-                                Text(if (guidanceStage.next() == WritingGuidanceStage.CHECK) "Clear and check" else "Fade guide")
+                                Text(stageAdvanceButtonText(guidanceStage, guideStrokeCount))
                             }
                         }
                     }
@@ -2188,9 +2245,13 @@ private fun writingStagePracticeBody(
     hasDueWriting: Boolean,
 ): String = when (stage) {
     WritingGuidanceStage.TRACE ->
-        "Trace the guide first and notice the shape before trying it lighter."
-    WritingGuidanceStage.FADE ->
-        "Use the guide as a quieter reference, then move to a clean canvas for Check."
+        "Trace the full stroke order first. Nothing is scored yet."
+    WritingGuidanceStage.FADE_ALL ->
+        "Use the faint full guide as a quieter reference before any strokes disappear."
+    WritingGuidanceStage.FEWER_STROKES ->
+        "Only the early strokes stay visible. Fill in the missing parts from memory."
+    WritingGuidanceStage.FIRST_STROKE ->
+        "Use just the starting cue, then finish the shape yourself."
     WritingGuidanceStage.CHECK ->
         if (hasDueWriting) {
             "Write without the guide on a clean canvas. This is the only stage that can save the review."
@@ -2203,9 +2264,12 @@ private fun writingStageTitle(
     stage: WritingGuidanceStage,
     correctionOnly: Boolean,
 ): String = when {
-    correctionOnly -> "Guided practice"
+    correctionOnly && stage == WritingGuidanceStage.CHECK -> "Try without guide"
+    correctionOnly -> "Guided correction"
     stage == WritingGuidanceStage.TRACE -> "Trace the shape"
-    stage == WritingGuidanceStage.FADE -> "Fade the guide"
+    stage == WritingGuidanceStage.FADE_ALL -> "Fade the guide"
+    stage == WritingGuidanceStage.FEWER_STROKES -> "Fewer strokes"
+    stage == WritingGuidanceStage.FIRST_STROKE -> "Start cue only"
     else -> "Check without guide"
 }
 
@@ -2213,12 +2277,18 @@ private fun writingStageCanvasBody(
     stage: WritingGuidanceStage,
     correctionOnly: Boolean,
 ): String = when {
+    correctionOnly && stage == WritingGuidanceStage.CHECK ->
+        "This pass is still practice only. The guide is hidden so you can test the shape before continuing."
     correctionOnly ->
-        "This pass is practice only. Use the guide, then continue when the shape feels familiar again."
+        "This pass is practice only. Work through the guide again, then continue when the shape feels familiar."
     stage == WritingGuidanceStage.TRACE ->
-        "Write over the guide slowly. This stage never saves a review."
-    stage == WritingGuidanceStage.FADE ->
-        "Use the guide as a quiet reference. Moving to Check clears the canvas first."
+        "Write over the numbered guide slowly. This stage never saves a review."
+    stage == WritingGuidanceStage.FADE_ALL ->
+        "Use the full guide as a quiet reference. The next stage removes some of it when stroke data is available."
+    stage == WritingGuidanceStage.FEWER_STROKES ->
+        "Follow the remaining early strokes, then complete the hidden strokes yourself."
+    stage == WritingGuidanceStage.FIRST_STROKE ->
+        "Use the first stroke marker to start in the right place, then finish from memory."
     else ->
         "The guide is hidden. Submit only this fresh unguided attempt."
 }
