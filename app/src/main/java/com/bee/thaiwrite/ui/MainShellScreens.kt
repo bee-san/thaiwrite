@@ -80,9 +80,19 @@ import com.bee.thaiwrite.data.repo.LessonOverview
 import com.bee.thaiwrite.data.repo.ReviewCardView
 import com.bee.thaiwrite.data.repo.ReviewPromptMode
 import com.bee.thaiwrite.ui.theme.Clay
+import com.bee.thaiwrite.ui.theme.Cloud
+import com.bee.thaiwrite.ui.theme.CloudEdge
+import com.bee.thaiwrite.ui.theme.Coral
+import com.bee.thaiwrite.ui.theme.CoralDeep
 import com.bee.thaiwrite.ui.theme.Ink
+import com.bee.thaiwrite.ui.theme.Ivory
+import com.bee.thaiwrite.ui.theme.Lavender
+import com.bee.thaiwrite.ui.theme.LavenderTint
+import com.bee.thaiwrite.ui.theme.MintTint
 import com.bee.thaiwrite.ui.theme.Palm
 import com.bee.thaiwrite.ui.theme.Saffron
+import com.bee.thaiwrite.ui.theme.SeaGlass
+import com.bee.thaiwrite.ui.theme.Slate
 import kotlinx.coroutines.launch
 
 internal enum class MainDestination(
@@ -95,17 +105,6 @@ internal enum class MainDestination(
     Words("words", "Words", Icons.AutoMirrored.Outlined.LibraryBooks),
     Profile("profile", "Profile", Icons.Outlined.PersonOutline),
 }
-
-private val Ivory = Color(0xFFFFFBF6)
-private val MintTint = Color(0xFFE8F6F3)
-private val SeaGlass = Color(0xFF2F9D98)
-private val Coral = Color(0xFFFF8E5F)
-private val CoralDeep = Color(0xFFFF7A4E)
-private val LavenderTint = Color(0xFFF1EBFB)
-private val Lavender = Color(0xFF8A6FCD)
-private val Cloud = Color(0xFFFFFFFF)
-private val CloudEdge = Color(0xFFE9E3DA)
-private val Slate = Color(0xFF6C757C)
 
 private data class StudyCallToAction(
     val title: String,
