@@ -13,6 +13,7 @@ import com.bee.thaiwrite.system.AudioPromptPlayer
 import com.bee.thaiwrite.system.GithubReleaseUpdate
 import com.bee.thaiwrite.system.GithubReleaseUpdater
 import com.bee.thaiwrite.system.ReminderScheduler
+import com.bee.thaiwrite.system.ThaiAudioSupport
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +25,8 @@ data class AppUiState(
     val snapshot: LibrarySnapshot? = null,
     val handwritingModelReady: Boolean = false,
     val thaiAudioReady: Boolean = false,
+    val thaiAudioStatus: String = "Checking Thai audio...",
+    val thaiAudioEngine: String? = null,
     val updateSupported: Boolean = false,
     val updateChecking: Boolean = false,
     val updateDownloading: Boolean = false,
@@ -78,14 +81,33 @@ class AppViewModel(
         viewModelScope.launch {
             val modelReady = runCatching { handwriting.isModelDownloaded() }.getOrDefault(false)
             repository.markModelDownloaded(modelReady)
-            val audioReady = runCatching { audioPromptPlayer.isThaiReady() }.getOrDefault(false)
+            val audioSupport = runCatching { audioPromptPlayer.diagnoseThaiSupport() }.getOrElse { error ->
+                ThaiAudioSupport(
+                    ready = false,
+                    engineLabel = null,
+                    enginePackage = null,
+                    message = error.message ?: "Unable to inspect Thai audio on this device.",
+                )
+            }
             _uiState.update {
                 it.copy(
                     handwritingModelReady = modelReady,
-                    thaiAudioReady = audioReady,
+                    thaiAudioReady = audioSupport.ready,
+                    thaiAudioStatus = audioSupport.message,
+                    thaiAudioEngine = audioSupport.engineLabel,
                     updateSupported = githubReleaseUpdater.isSupported(),
                 )
             }
+        }
+    }
+
+    fun openThaiAudioSetup() {
+        runCatching {
+            audioPromptPlayer.openThaiSetup()
+        }.onSuccess {
+            postMessage("Open Android Text-to-speech settings, install a Thai voice, then return and tap refresh.")
+        }.onFailure { error ->
+            postMessage(error.message ?: "Unable to open Android Text-to-speech settings.")
         }
     }
 
@@ -290,6 +312,7 @@ class AppViewModel(
             audioPromptPlayer.play(text)
         }.onFailure { error ->
             postMessage(error.message ?: "Unable to play Thai audio.")
+            refreshSupportState()
         }
     }
 

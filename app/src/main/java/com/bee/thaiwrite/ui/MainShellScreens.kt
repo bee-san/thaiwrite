@@ -29,7 +29,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LocalFireDepartment
@@ -76,9 +75,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.bee.thaiwrite.BuildConfig
+import com.bee.thaiwrite.data.repo.LibrarySnapshot
 import com.bee.thaiwrite.data.repo.LessonOverview
 import com.bee.thaiwrite.data.repo.ReviewCardView
 import com.bee.thaiwrite.data.repo.ReviewPromptMode
+import com.bee.thaiwrite.ui.theme.Clay
 import com.bee.thaiwrite.ui.theme.Ink
 import com.bee.thaiwrite.ui.theme.Palm
 import com.bee.thaiwrite.ui.theme.Saffron
@@ -90,7 +91,7 @@ internal enum class MainDestination(
     val icon: ImageVector,
 ) {
     Home("home", "Home", Icons.Outlined.Home),
-    Practice("practice-hub", "Practice", Icons.Outlined.Edit),
+    Practice("practice-hub", "Study", Icons.Outlined.PlayArrow),
     Words("words", "Words", Icons.AutoMirrored.Outlined.LibraryBooks),
     Profile("profile", "Profile", Icons.Outlined.PersonOutline),
 }
@@ -106,13 +107,22 @@ private val Cloud = Color(0xFFFFFFFF)
 private val CloudEdge = Color(0xFFE9E3DA)
 private val Slate = Color(0xFF6C757C)
 
+private data class StudyCallToAction(
+    val title: String,
+    val body: String,
+    val detail: String,
+    val buttonLabel: String,
+)
+
 @Composable
 internal fun DashboardHomeScreen(
     uiState: AppUiState,
     selected: MainDestination,
     onNavigate: (MainDestination) -> Unit,
+    onOpenStudy: () -> Unit,
     onOpenLesson: (String) -> Unit,
     onOpenLibrary: () -> Unit,
+    onOpenThaiAudioSetup: () -> Unit,
     onCheckUpdates: () -> Unit,
     onInstallUpdate: () -> Unit,
     onOpenUpdatePage: () -> Unit,
@@ -120,6 +130,7 @@ internal fun DashboardHomeScreen(
     snackbarHostState: SnackbarHostState,
 ) {
     val snapshot = uiState.snapshot ?: return
+    val studyCallToAction = buildStudyCallToAction(snapshot)
     DashboardScaffold(
         selected = selected,
         onNavigate = onNavigate,
@@ -152,6 +163,15 @@ internal fun DashboardHomeScreen(
                         "Start a streak today with one review or one writing check."
                     },
                 )
+            }
+            item {
+                BigStudyPanel(
+                    callToAction = studyCallToAction,
+                    onClick = onOpenStudy,
+                )
+            }
+            item {
+                StudyFlowPanel()
             }
             item {
                 SoftPanel {
@@ -190,6 +210,17 @@ internal fun DashboardHomeScreen(
                     }
                 }
             }
+            if (!uiState.thaiAudioReady) {
+                item {
+                    StatusPanel(
+                        title = "Thai audio needs setup",
+                        body = uiState.thaiAudioStatus,
+                        accent = LavenderTint,
+                        buttonText = "Fix audio",
+                        onClick = onOpenThaiAudioSetup,
+                    )
+                }
+            }
             if (uiState.updateSupported) {
                 item {
                     UpdatePanel(
@@ -219,15 +250,6 @@ internal fun DashboardHomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    QuickActionTile(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Outlined.PlayArrow,
-                        title = "Start writing",
-                        body = "Jump into the next lesson or due review.",
-                        accent = MintTint,
-                        iconTint = SeaGlass,
-                        onClick = { onNavigate(MainDestination.Practice) },
-                    )
                     QuickActionTile(
                         modifier = Modifier.weight(1f),
                         icon = Icons.AutoMirrored.Outlined.LibraryBooks,
@@ -276,8 +298,8 @@ internal fun DashboardHomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            OutlinedButton(onClick = { onNavigate(MainDestination.Practice) }) {
-                                Text("Review now")
+                            OutlinedButton(onClick = onOpenStudy) {
+                                Text("Study")
                             }
                             Button(
                                 onClick = { snapshot.nextLessonId?.let(onOpenLesson) },
@@ -299,12 +321,13 @@ internal fun PracticeHubScreen(
     uiState: AppUiState,
     selected: MainDestination,
     onNavigate: (MainDestination) -> Unit,
-    onOpenReview: () -> Unit,
+    onOpenStudy: () -> Unit,
     onOpenLesson: (String) -> Unit,
     snackbarHostState: SnackbarHostState,
 ) {
     val snapshot = uiState.snapshot ?: return
     val nextLesson = snapshot.lessons.firstOrNull { it.lesson.id == snapshot.nextLessonId }
+    val studyCallToAction = buildStudyCallToAction(snapshot)
 
     DashboardScaffold(
         selected = selected,
@@ -320,17 +343,23 @@ internal fun PracticeHubScreen(
         ) {
             item {
                 AppHeader(
-                    title = "Practice",
+                    title = "Study",
                     streak = snapshot.streak,
                     onBellClick = { onNavigate(MainDestination.Profile) },
                 )
             }
             item {
+                BigStudyPanel(
+                    callToAction = studyCallToAction,
+                    onClick = onOpenStudy,
+                )
+            }
+            item {
                 SoftPanel {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Due right now", style = ThaiSectionTitleStyle(), color = Ink)
+                        Text("What Study will do", style = ThaiSectionTitleStyle(), color = Ink)
                         Text(
-                            "Switch between recall, writing, and audio until the queue is empty.",
+                            "You do not need to pick card types. Study automatically moves through recall, writing, and audio in the right order.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = Slate,
                         )
@@ -359,14 +388,6 @@ internal fun PracticeHubScreen(
                                 accent = LavenderTint,
                                 tint = Lavender,
                             )
-                        }
-                        Button(
-                            onClick = onOpenReview,
-                            enabled = snapshot.dueCards.isNotEmpty(),
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = SeaGlass),
-                        ) {
-                            Text(if (snapshot.dueCards.isEmpty()) "No cards due" else "Start due review")
                         }
                     }
                 }
@@ -537,6 +558,8 @@ internal fun ProfileScreen(
     onNavigate: (MainDestination) -> Unit,
     onReminderSelected: (Int, Int) -> Unit,
     onRedownloadModel: (Boolean) -> Unit,
+    onOpenThaiAudioSetup: () -> Unit,
+    onRefreshSupportState: () -> Unit,
     onCheckUpdates: () -> Unit,
     onInstallUpdate: () -> Unit,
     onOpenUpdatePage: () -> Unit,
@@ -650,17 +673,39 @@ internal fun ProfileScreen(
                 )
             }
             item {
-                StatusPanel(
-                    title = "Thai audio",
-                    body = if (uiState.thaiAudioReady) {
-                        "Thai TextToSpeech voice data is available on this device."
-                    } else {
-                        "Install or enable Thai voice data if audio cards stay silent."
-                    },
-                    accent = LavenderTint,
-                    buttonText = null,
-                    onClick = null,
-                )
+                SoftPanel {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Thai audio", style = ThaiSectionTitleStyle(), color = Ink)
+                        Text(
+                            uiState.thaiAudioStatus,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Slate,
+                        )
+                        uiState.thaiAudioEngine?.let { engine ->
+                            Text(
+                                "Current engine: $engine",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Clay,
+                            )
+                        }
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            if (!uiState.thaiAudioReady) {
+                                Button(
+                                    onClick = onOpenThaiAudioSetup,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Lavender),
+                                ) {
+                                    Text("Fix audio")
+                                }
+                            }
+                            OutlinedButton(onClick = onRefreshSupportState) {
+                                Text("Refresh status")
+                            }
+                        }
+                    }
+                }
             }
             item {
                 NotificationPermissionPanel()
@@ -719,6 +764,131 @@ private fun DashboardScaffold(
         ) {
             content(padding)
         }
+    }
+}
+
+private fun buildStudyCallToAction(snapshot: LibrarySnapshot): StudyCallToAction {
+    val nextLesson = snapshot.lessons.firstOrNull { it.lesson.id == snapshot.nextLessonId }
+    return when {
+        snapshot.dueCards.isNotEmpty() -> StudyCallToAction(
+            title = "Clear the cards that are already due",
+            body = "${snapshot.dueCards.size} review cards are waiting right now.",
+            detail = "Tap Study and the app will move through recall, writing, and audio for you.",
+            buttonLabel = "Study now",
+        )
+        nextLesson != null && nextLesson.started -> StudyCallToAction(
+            title = "Continue the next alphabet batch",
+            body = "Pick up ${nextLesson.lesson.title} and keep drilling the same letters until they stick.",
+            detail = "You will write first, then spaced repetition will bring the letters back later.",
+            buttonLabel = "Study now",
+        )
+        nextLesson != null -> StudyCallToAction(
+            title = "Learn a tiny new set of letters",
+            body = "Open ${nextLesson.lesson.title} and start the next baby-step lesson.",
+            detail = "The course stays locked in order so you only handle a small amount at once.",
+            buttonLabel = "Study now",
+        )
+        else -> StudyCallToAction(
+            title = "Replay the loved words deck",
+            body = "All current alphabet lessons are already in motion.",
+            detail = "Use Study to keep your recall fresh, then visit Words for names and family words.",
+            buttonLabel = "Study now",
+        )
+    }
+}
+
+@Composable
+private fun BigStudyPanel(
+    callToAction: StudyCallToAction,
+    onClick: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(32.dp),
+        color = Ink,
+        shadowElevation = 10.dp,
+        tonalElevation = 2.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 22.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("Start here", style = ThaiSectionOverlineStyle(), color = Color(0xFFAFE5DD))
+            Text(
+                callToAction.title,
+                style = MaterialTheme.typography.headlineMedium,
+                color = Cloud,
+            )
+            Text(
+                callToAction.body,
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color(0xFFE8F6F3),
+            )
+            Text(
+                callToAction.detail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFBFD7D5),
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                StudyStepPill("1. See")
+                StudyStepPill("2. Write")
+                StudyStepPill("3. Review later")
+            }
+            Button(
+                onClick = onClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Coral,
+                    contentColor = Cloud,
+                ),
+                shape = RoundedCornerShape(22.dp),
+            ) {
+                Icon(Icons.Outlined.PlayArrow, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(callToAction.buttonLabel, style = MaterialTheme.typography.titleLarge)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudyFlowPanel() {
+    SoftPanel {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("How to learn the alphabet here", style = ThaiSectionTitleStyle(), color = Ink)
+            Text(
+                "Do not jump around the menus. Tap Study, copy the new letter or word, check it, and come back later for the short review queue.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Slate,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                StudyStepPill("Small lessons")
+                StudyStepPill("Write by hand")
+                StudyStepPill("Short reviews")
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudyStepPill(label: String) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MintTint,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.labelLarge,
+            color = Ink,
+        )
     }
 }
 
