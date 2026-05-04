@@ -76,6 +76,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.bee.thaiwrite.BuildConfig
 import com.bee.thaiwrite.data.repo.LessonOverview
+import com.bee.thaiwrite.domain.practice.writingTarget
 import com.bee.thaiwrite.data.repo.ReviewPromptMode
 import com.bee.thaiwrite.ui.components.WritingCanvas
 import com.bee.thaiwrite.ui.components.rememberWritingPadState
@@ -588,6 +589,7 @@ private fun PracticeScreen(
     val padState = rememberWritingPadState()
     val scope = rememberCoroutineScope()
     val current = overview.items.getOrNull(index)
+    val writingTarget = current?.item?.writingTarget()
 
     LaunchedEffect(index) {
         padState.clear()
@@ -630,6 +632,9 @@ private fun PracticeScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Item ${index + 1} of ${overview.items.size}", style = MaterialTheme.typography.labelLarge, color = Palm)
                     Text(current.item.prompt, style = MaterialTheme.typography.headlineMedium)
+                    writingTarget?.supportText?.let {
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = Clay)
+                    }
                     if (showHint) {
                         Text("Hint: ${current.item.transliteration}", style = MaterialTheme.typography.bodyLarge)
                         current.guide?.tip?.let {
@@ -644,7 +649,7 @@ private fun PracticeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(320.dp),
-                    guideText = current.item.thai,
+                    guideText = writingTarget?.displayText ?: current.item.thai,
                     showGuide = showGuide,
                 )
             }
@@ -665,7 +670,7 @@ private fun PracticeScreen(
                             runCatching {
                                 viewModel.assessWriting(
                                     itemId = current.item.id,
-                                    expectedThai = current.item.thai,
+                                    acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
                                     strokes = padState.strokes(),
                                     canvasWidth = padState.canvasSize.width.toFloat(),
                                     canvasHeight = padState.canvasSize.height.toFloat(),
@@ -686,7 +691,7 @@ private fun PracticeScreen(
                 item {
                     FeedbackCard(
                         passed = assessment.passed,
-                        expected = current.item.thai,
+                        expected = writingTarget?.displayText ?: current.item.thai,
                         topCandidate = assessment.topCandidate,
                     )
                 }
@@ -728,6 +733,7 @@ private fun ReviewScreen(
         }
     }
     val current = displayedCard
+    val writingTarget = current?.item?.writingTarget()
     var revealed by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
     var showHint by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
     val cardMode = current?.promptMode
@@ -786,6 +792,11 @@ private fun ReviewScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = Clay,
                     )
+                    if (current.requiresWriting) {
+                        writingTarget?.supportText?.let {
+                            Text(it, style = MaterialTheme.typography.bodyMedium, color = Clay)
+                        }
+                    }
                     if (current.requiresWriting && showHint) {
                         Text(current.secondaryPrompt, style = MaterialTheme.typography.bodyLarge)
                         current.guide?.tip?.let {
@@ -816,7 +827,7 @@ private fun ReviewScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(320.dp),
-                        guideText = current.item.thai,
+                        guideText = writingTarget?.displayText ?: current.item.thai,
                         showGuide = revealed,
                     )
                 }
@@ -835,7 +846,7 @@ private fun ReviewScreen(
                                 runCatching {
                                     viewModel.assessWriting(
                                         itemId = current.item.id,
-                                        expectedThai = current.item.thai,
+                                        acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
                                         strokes = padState.strokes(),
                                         canvasWidth = padState.canvasSize.width.toFloat(),
                                         canvasHeight = padState.canvasSize.height.toFloat(),
@@ -856,7 +867,7 @@ private fun ReviewScreen(
                     item {
                         FeedbackCard(
                             passed = assessment.passed,
-                            expected = current.item.thai,
+                            expected = writingTarget?.displayText ?: current.item.thai,
                             topCandidate = assessment.topCandidate,
                         )
                     }

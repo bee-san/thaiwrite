@@ -85,7 +85,7 @@ class GithubReleaseUpdater(context: Context) {
         connection.useChecked { checked ->
             val currentVersion = normalizeVersionName(BuildConfig.VERSION_NAME)
             val releases = JSONArray(checked.readText())
-            val candidates = parseReleaseCandidates(releases)
+            val candidates = parseReleaseCandidates(parseReleaseMetadata(releases))
             val update = selectNewestUpdate(candidates, currentVersion) ?: return@withContext null
             return@withContext GithubReleaseUpdate(
                 currentVersionName = currentVersion,
@@ -161,129 +161,6 @@ class GithubReleaseUpdater(context: Context) {
             }
         }
 
-    private fun parseReleaseCandidates(releases: JSONArray): List<ReleaseCandidate> {
-        val parsed = mutableListOf<ReleaseCandidate>()
-        for (index in 0 until releases.length()) {
-            val release = releases.getJSONObject(index)
-            if (release.optBoolean("draft") || release.optBoolean("prerelease")) {
-                continue
-            }
-            val versionName = normalizeVersionName(
-                release.optString("tag_name").ifBlank { release.optString("name") },
-            )
-            if (versionName.isBlank()) {
-                continue
-            }
-            val assets = release.optJSONArray("assets")
-            val asset = findApkAsset(assets) ?: continue
-            parsed += ReleaseCandidate(
-                versionName = versionName,
-                publishedAt = release.optString("published_at")
-                    .takeIf { it.isNotBlank() }
-                    ?.let(Instant::parse),
-                releaseUrl = release.optString("html_url"),
-                releaseNotes = release.optString("body"),
-                assetName = asset.optString("name"),
-                assetDownloadUrl = asset.optString("browser_download_url"),
-                assetSizeBytes = asset.optLong("size"),
-                sha256Digest = asset.optString("digest")
-                    .takeIf { it.startsWith("sha256:") }
-                    ?.removePrefix("sha256:"),
-                checksumAssetDownloadUrl = findChecksumAsset(assets, asset.optString("name"))
-                    ?.optString("browser_download_url")
-                    ?.takeIf { it.isNotBlank() },
-            )
-        }
-        return parsed
-    }
-
-    private fun selectNewestUpdate(
-        candidates: List<ReleaseCandidate>,
-        currentVersion: String,
-    ): ReleaseCandidate? {
-        val newerByVersion = candidates
-            .filter { compareVersionNames(it.versionName, currentVersion) > 0 }
-            .maxWithOrNull(
-                Comparator { left, right ->
-                    val versionComparison = compareVersionNames(left.versionName, right.versionName)
-                    if (versionComparison != 0) {
-                        versionComparison
-                    } else {
-                        (left.publishedAt ?: Instant.EPOCH).compareTo(right.publishedAt ?: Instant.EPOCH)
-                    }
-                },
-            )
-        if (newerByVersion != null) {
-            return newerByVersion
-        }
-
-        return candidates
-            .filter { normalizeVersionName(it.versionName) != currentVersion }
-            .maxByOrNull { it.publishedAt ?: Instant.EPOCH }
-    }
-
-    private fun findApkAsset(assets: JSONArray?): JSONObject? {
-        if (assets == null) {
-            return null
-        }
-        val apkAssets = mutableListOf<JSONObject>()
-        for (index in 0 until assets.length()) {
-            val asset = assets.getJSONObject(index)
-            val name = asset.optString("name")
-            val contentType = asset.optString("content_type")
-            val isApk = name.endsWith(".apk", ignoreCase = true) || contentType == "application/vnd.android.package-archive"
-            if (!isApk) {
-                continue
-            }
-            if (name.contains("debug", ignoreCase = true) || name.contains("unsigned", ignoreCase = true)) {
-                continue
-            }
-            apkAssets += asset
-        }
-
-        val exact = apkAssets.firstOrNull { it.optString("name").equals("app-release.apk", ignoreCase = true) }
-        if (exact != null) {
-            return exact
-        }
-
-        if (apkAssets.size == 1) {
-            return apkAssets.first()
-        }
-
-        val releaseNamed = apkAssets.filter { it.optString("name").contains("release", ignoreCase = true) }
-        if (releaseNamed.size == 1) {
-            return releaseNamed.first()
-        }
-        if (releaseNamed.size > 1) {
-            throw IllegalStateException("GitHub release contains multiple release APK assets. Expected exactly one.")
-        }
-        if (apkAssets.isEmpty()) {
-            return null
-        }
-        throw IllegalStateException("GitHub release contains multiple APK assets. Expected exactly one installable release APK.")
-    }
-
-    private fun findChecksumAsset(assets: JSONArray?, apkAssetName: String): JSONObject? {
-        if (assets == null || apkAssetName.isBlank()) {
-            return null
-        }
-        val expectedNames = setOf(
-            "$apkAssetName.sha256",
-            "$apkAssetName.sha256.txt",
-        )
-        for (index in 0 until assets.length()) {
-            val asset = assets.getJSONObject(index)
-            val name = asset.optString("name")
-            if (name in expectedNames) {
-                return asset
-            }
-        }
-        return null
-    }
-
-    private fun sanitizeAssetName(assetName: String): String =
-        assetName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-
     private fun downloadChecksumDigest(url: String): String? {
         val connection = openConnection(url, acceptJson = false)
         connection.useChecked { checked ->
@@ -341,7 +218,7 @@ class GithubReleaseUpdater(context: Context) {
     }
 }
 
-private data class ReleaseCandidate(
+internal data class ReleaseCandidate(
     val versionName: String,
     val publishedAt: Instant?,
     val releaseUrl: String,
@@ -352,6 +229,158 @@ private data class ReleaseCandidate(
     val sha256Digest: String?,
     val checksumAssetDownloadUrl: String?,
 )
+
+internal data class ReleaseMetadata(
+    val tagName: String,
+    val name: String,
+    val draft: Boolean,
+    val prerelease: Boolean,
+    val publishedAt: Instant?,
+    val releaseUrl: String,
+    val releaseNotes: String,
+    val assets: List<ReleaseAssetMetadata>,
+)
+
+internal data class ReleaseAssetMetadata(
+    val name: String,
+    val contentType: String,
+    val browserDownloadUrl: String,
+    val sizeBytes: Long,
+    val digest: String?,
+)
+
+internal fun parseReleaseCandidates(releases: List<ReleaseMetadata>): List<ReleaseCandidate> =
+    releases.mapNotNull { release ->
+        if (release.draft || release.prerelease) {
+            return@mapNotNull null
+        }
+        val versionName = GithubReleaseUpdater.normalizeVersionName(
+            release.tagName.ifBlank { release.name },
+        )
+        if (versionName.isBlank()) {
+            return@mapNotNull null
+        }
+        val asset = selectInstallableApkAsset(release.assets) ?: return@mapNotNull null
+        ReleaseCandidate(
+            versionName = versionName,
+            publishedAt = release.publishedAt,
+            releaseUrl = release.releaseUrl,
+            releaseNotes = release.releaseNotes,
+            assetName = asset.name,
+            assetDownloadUrl = asset.browserDownloadUrl,
+            assetSizeBytes = asset.sizeBytes,
+            sha256Digest = asset.digest
+                ?.takeIf { it.startsWith("sha256:") }
+                ?.removePrefix("sha256:"),
+            checksumAssetDownloadUrl = selectChecksumAsset(release.assets, asset.name)?.browserDownloadUrl?.takeIf { it.isNotBlank() },
+        )
+    }
+
+internal fun selectNewestUpdate(
+    candidates: List<ReleaseCandidate>,
+    currentVersion: String,
+): ReleaseCandidate? {
+    val newerByVersion = candidates
+        .filter { GithubReleaseUpdater.compareVersionNames(it.versionName, currentVersion) > 0 }
+        .maxWithOrNull(
+            Comparator { left, right ->
+                val versionComparison = GithubReleaseUpdater.compareVersionNames(left.versionName, right.versionName)
+                if (versionComparison != 0) {
+                    versionComparison
+                } else {
+                    (left.publishedAt ?: Instant.EPOCH).compareTo(right.publishedAt ?: Instant.EPOCH)
+                }
+            },
+        )
+    if (newerByVersion != null) {
+        return newerByVersion
+    }
+
+    return candidates
+        .filter { GithubReleaseUpdater.normalizeVersionName(it.versionName) != currentVersion }
+        .maxByOrNull { it.publishedAt ?: Instant.EPOCH }
+}
+
+internal fun selectInstallableApkAsset(assets: List<ReleaseAssetMetadata>): ReleaseAssetMetadata? {
+    val apkAssets = assets.filter { asset ->
+        val isApk = asset.name.endsWith(".apk", ignoreCase = true) || asset.contentType == "application/vnd.android.package-archive"
+        isApk && !asset.name.contains("debug", ignoreCase = true) && !asset.name.contains("unsigned", ignoreCase = true)
+    }
+
+    val exact = apkAssets.firstOrNull { it.name.equals("app-release.apk", ignoreCase = true) }
+    if (exact != null) {
+        return exact
+    }
+
+    if (apkAssets.size == 1) {
+        return apkAssets.first()
+    }
+
+    val releaseNamed = apkAssets.filter { it.name.contains("release", ignoreCase = true) }
+    if (releaseNamed.size == 1) {
+        return releaseNamed.first()
+    }
+    if (releaseNamed.size > 1) {
+        throw IllegalStateException("GitHub release contains multiple release APK assets. Expected exactly one.")
+    }
+    if (apkAssets.isEmpty()) {
+        return null
+    }
+    throw IllegalStateException("GitHub release contains multiple APK assets. Expected exactly one installable release APK.")
+}
+
+internal fun selectChecksumAsset(assets: List<ReleaseAssetMetadata>, apkAssetName: String): ReleaseAssetMetadata? {
+    if (apkAssetName.isBlank()) {
+        return null
+    }
+    val expectedNames = setOf(
+        "$apkAssetName.sha256",
+        "$apkAssetName.sha256.txt",
+    )
+    return assets.firstOrNull { it.name in expectedNames }
+}
+
+internal fun sanitizeAssetName(assetName: String): String =
+    assetName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+
+private fun parseReleaseMetadata(releases: JSONArray): List<ReleaseMetadata> =
+    buildList(releases.length()) {
+        for (index in 0 until releases.length()) {
+            val release = releases.getJSONObject(index)
+            add(
+                ReleaseMetadata(
+                    tagName = release.optString("tag_name"),
+                    name = release.optString("name"),
+                    draft = release.optBoolean("draft"),
+                    prerelease = release.optBoolean("prerelease"),
+                    publishedAt = release.optString("published_at").takeIf { it.isNotBlank() }?.let(Instant::parse),
+                    releaseUrl = release.optString("html_url"),
+                    releaseNotes = release.optString("body"),
+                    assets = parseReleaseAssets(release.optJSONArray("assets")),
+                ),
+            )
+        }
+    }
+
+private fun parseReleaseAssets(assets: JSONArray?): List<ReleaseAssetMetadata> {
+    if (assets == null) {
+        return emptyList()
+    }
+    return buildList(assets.length()) {
+        for (index in 0 until assets.length()) {
+            val asset = assets.getJSONObject(index)
+            add(
+                ReleaseAssetMetadata(
+                    name = asset.optString("name"),
+                    contentType = asset.optString("content_type"),
+                    browserDownloadUrl = asset.optString("browser_download_url"),
+                    sizeBytes = asset.optLong("size"),
+                    digest = asset.optString("digest").takeIf { it.isNotBlank() },
+                ),
+            )
+        }
+    }
+}
 
 private inline fun <T> HttpURLConnection.useChecked(block: (HttpURLConnection) -> T): T {
     try {

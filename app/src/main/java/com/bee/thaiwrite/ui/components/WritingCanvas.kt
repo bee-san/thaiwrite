@@ -4,9 +4,10 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.Typeface
-import android.view.MotionEvent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -27,11 +28,12 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.bee.thaiwrite.domain.practice.StrokePoint
+import kotlin.math.abs
 
 @Stable
 class WritingPadState {
@@ -58,23 +60,29 @@ class WritingPadState {
 
     fun isEmpty(): Boolean = committedStrokes.isEmpty() && activeStroke.isEmpty()
 
-    fun onTouch(event: MotionEvent): Boolean {
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                activeStroke.clear()
-                activeStroke.add(StrokePoint(event.x, event.y, event.eventTime))
-            }
-            MotionEvent.ACTION_MOVE -> {
-                activeStroke.add(StrokePoint(event.x, event.y, event.eventTime))
-            }
-            MotionEvent.ACTION_UP,
-            MotionEvent.ACTION_CANCEL -> {
-                activeStroke.add(StrokePoint(event.x, event.y, event.eventTime))
-                committedStrokes.add(activeStroke.toList())
-                activeStroke.clear()
-            }
+    fun beginStroke(x: Float, y: Float, timestamp: Long) {
+        activeStroke.clear()
+        appendPoint(x, y, timestamp)
+    }
+
+    fun extendStroke(x: Float, y: Float, timestamp: Long) {
+        appendPoint(x, y, timestamp)
+    }
+
+    fun endStroke(x: Float, y: Float, timestamp: Long) {
+        appendPoint(x, y, timestamp)
+        if (activeStroke.isNotEmpty()) {
+            committedStrokes.add(activeStroke.toList())
         }
-        return true
+        activeStroke.clear()
+    }
+
+    private fun appendPoint(x: Float, y: Float, timestamp: Long) {
+        val lastPoint = activeStroke.lastOrNull()
+        if (lastPoint != null && abs(lastPoint.x - x) < 0.5f && abs(lastPoint.y - y) < 0.5f) {
+            return
+        }
+        activeStroke.add(StrokePoint(x, y, timestamp))
     }
 }
 
@@ -94,7 +102,34 @@ fun WritingCanvas(
             .clip(RoundedCornerShape(28.dp))
             .background(Color(0xFFFFFBF4))
             .onSizeChanged(state::onSizeChanged)
-            .pointerInteropFilter { event -> state.onTouch(event) },
+            .pointerInput(state) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    state.beginStroke(down.position.x, down.position.y, down.uptimeMillis)
+                    down.consume()
+
+                    val pointerId = down.id
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == pointerId } ?: continue
+                        if (change.pressed) {
+                            change.historical.forEach { historical ->
+                                state.extendStroke(
+                                    x = historical.position.x,
+                                    y = historical.position.y,
+                                    timestamp = historical.uptimeMillis,
+                                )
+                            }
+                            state.extendStroke(change.position.x, change.position.y, change.uptimeMillis)
+                        } else {
+                            state.endStroke(change.position.x, change.position.y, change.uptimeMillis)
+                            change.consume()
+                            break
+                        }
+                        change.consume()
+                    }
+                }
+            },
     ) {
         Canvas(
             modifier = Modifier
