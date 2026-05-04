@@ -280,7 +280,7 @@ class AppViewModel(
 
     suspend fun assessWriting(
         itemId: String,
-        expectedThai: String,
+        acceptedTargets: List<String>,
         strokes: List<List<StrokePoint>>,
         canvasWidth: Float,
         canvasHeight: Float,
@@ -293,7 +293,7 @@ class AppViewModel(
             width = canvasWidth,
             height = canvasHeight,
         )
-        val passed = HandwritingRecognitionService.matchesExpected(expectedThai, result.candidates)
+        val passed = HandwritingRecognitionService.matchesAnyExpected(acceptedTargets, result.candidates)
         repository.submitWritingReview(
             itemId = itemId,
             passed = passed,

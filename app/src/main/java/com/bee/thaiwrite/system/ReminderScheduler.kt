@@ -40,16 +40,20 @@ class ReminderScheduler(private val context: Context) {
     private fun computeDelay(hour: Int, minute: Int): Duration {
         val zone = ZoneId.systemDefault()
         val now = LocalDateTime.now(zone)
-        var next = now.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-        if (!next.isAfter(now)) {
-            next = next.plusDays(1)
-        }
-        return Duration.between(now, next)
+        return computeNextReminderDelay(now, hour, minute)
     }
 
     companion object {
         private const val WORK_NAME = "thaiwrite.daily.reminder"
     }
+}
+
+internal fun computeNextReminderDelay(now: LocalDateTime, hour: Int, minute: Int): Duration {
+    var next = now.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+    if (!next.isAfter(now)) {
+        next = next.plusDays(1)
+    }
+    return Duration.between(now, next)
 }
 
 class StudyReminderWorker(
