@@ -6,10 +6,15 @@ import com.bee.thaiwrite.data.db.DailyStreakEntity
 import com.bee.thaiwrite.data.db.LessonProgressEntity
 import com.bee.thaiwrite.data.db.ModelDownloadStateEntity
 import com.bee.thaiwrite.data.db.StudyCardEntity
+import com.bee.thaiwrite.data.model.GuideSeed
 import com.bee.thaiwrite.data.model.ItemType
+import com.bee.thaiwrite.data.model.ItemComponentSeed
+import com.bee.thaiwrite.data.model.LessonIntroSeed
+import com.bee.thaiwrite.data.model.LessonKind
 import com.bee.thaiwrite.data.model.LessonSeed
 import com.bee.thaiwrite.data.model.SeedBundle
 import com.bee.thaiwrite.data.model.StudyItemSeed
+import com.bee.thaiwrite.data.model.TeachingMode
 import com.bee.thaiwrite.system.SettingsState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,17 +26,21 @@ class LibrarySnapshotBuilderTest {
     private val lessonOne = LessonSeed(
         id = "lesson_1",
         order = 1,
-        stage = "Consonants",
+        stage = "Starter symbols",
+        kind = LessonKind.SYMBOL_BATCH,
         title = "Lesson One",
         description = "First lesson",
+        intro = intro("First lesson"),
         itemIds = listOf("ko_kai", "kho_khai"),
     )
     private val lessonTwo = LessonSeed(
         id = "lesson_2",
         order = 2,
-        stage = "Words",
+        stage = "Useful words",
+        kind = LessonKind.WORD_BRIDGE,
         title = "Lesson Two",
         description = "Second lesson",
+        intro = intro("Second lesson"),
         itemIds = listOf("mae"),
     )
     private val koKai = item(
@@ -66,11 +75,23 @@ class LibrarySnapshotBuilderTest {
         english = "mother",
         audioText = "แม่",
         prompt = "Write mother in Thai.",
+        category = "Family",
+        teachingNote = "A family word.",
+        teachingMode = TeachingMode.BUILD,
+        components = listOf(
+            ItemComponentSeed(itemId = "ko_kai", note = "first part"),
+        ),
     )
     private val seeds = SeedBundle(
         lessons = listOf(lessonOne, lessonTwo),
         items = listOf(koKai, khoKhai, mae),
-        guides = emptyMap(),
+        guides = mapOf(
+            mae.id to GuideSeed(
+                itemId = mae.id,
+                guideType = "glyph-outline",
+                tip = "Write the whole word slowly.",
+            ),
+        ),
     )
     private val streak = DailyStreakEntity(id = 1, currentStreak = 3, maxStreak = 8, lastStudyDay = "2026-05-04")
     private val settings = SettingsState(onboardingComplete = true, reminderHour = 7, reminderMinute = 30)
@@ -102,6 +123,8 @@ class LibrarySnapshotBuilderTest {
         assertEquals(1, snapshot.dueWritingCount)
         assertEquals(1, snapshot.dueAudioCount)
         assertEquals(lessonOne.id, snapshot.nextLessonId)
+        assertEquals(nowMillis + 60_000, snapshot.nextDueAtMillis)
+        assertEquals(nowMillis + 60_000, snapshot.lessons.first().nextDueWritingAtMillis)
         assertTrue(snapshot.dueCards.all { it.item.lessonId == lessonOne.id })
     }
 
@@ -132,8 +155,56 @@ class LibrarySnapshotBuilderTest {
         assertEquals(1, snapshot.completedLessonCount)
         assertEquals(1, snapshot.startedLessonCount)
         assertTrue(snapshot.modelDownloaded)
-        assertEquals(listOf(mae), snapshot.focusWords)
+        assertEquals(listOf(mae), snapshot.usefulWords)
         assertEquals("mother", snapshot.dueCards.first { it.card.cardType == CardType.RECOGNITION.name }.primaryPrompt)
+    }
+
+    @Test
+    fun `preview items do not block required lesson progression`() {
+        val previewWord = item(
+            id = "preview_word",
+            lessonId = lessonOne.id,
+            sortOrder = 4,
+            type = ItemType.WORD,
+            thai = "ไม่",
+            transliteration = "mai",
+            english = "not",
+            audioText = "ไม่",
+            prompt = "Write not in Thai.",
+            category = "Essentials",
+            teachingNote = "Preview word.",
+            teachingMode = TeachingMode.PREVIEW,
+            components = listOf(ItemComponentSeed(itemId = koKai.id, note = "known part")),
+        )
+        val previewLessonOne = lessonOne.copy(itemIds = listOf(koKai.id, previewWord.id))
+        val localSeeds = SeedBundle(
+            lessons = listOf(previewLessonOne, lessonTwo),
+            items = listOf(koKai, previewWord, mae),
+            guides = emptyMap(),
+        )
+        val cards = listOf(
+            card(koKai.id, CardType.WRITING, state = CardState.REVIEW.name, dueAt = nowMillis + 100_000, seedOrder = 12),
+            card(previewWord.id, CardType.WRITING, state = CardState.NEW.name, dueAt = nowMillis + 100_000, seedOrder = 42),
+            card(mae.id, CardType.WRITING, dueAt = nowMillis, seedOrder = 32),
+        )
+
+        val snapshot = buildLibrarySnapshot(
+            seeds = localSeeds,
+            cards = cards,
+            progress = emptyList(),
+            streak = streak,
+            modelState = null,
+            settingsState = settings,
+            nowMillis = nowMillis,
+        )
+
+        assertEquals(1, snapshot.lessons.first().requiredMasteredCount)
+        assertEquals(1, snapshot.lessons.first().requiredTotalCount)
+        assertEquals(1, snapshot.lessons.first().masteredCount)
+        assertEquals(2, snapshot.lessons.first().totalCount)
+        assertTrue(snapshot.lessons[1].unlocked)
+        assertEquals(lessonTwo.id, snapshot.nextLessonId)
+        assertEquals(1, snapshot.completedLessonCount)
     }
 
     @Test
@@ -195,6 +266,9 @@ class LibrarySnapshotBuilderTest {
         assertTrue(writing.requiresWriting)
         assertEquals("Listen to the Thai audio, then recall the script.", audio.primaryPrompt)
         assertEquals("mother", audio.secondaryPrompt)
+        assertEquals(1, writing.breakdown.size)
+        assertFalse(writing.breakdown.first().comingSoon)
+        assertEquals("Write the whole word slowly.", writing.guide?.tip)
         assertTrue(snapshot.onboardingComplete)
         assertEquals(7, snapshot.reminderHour)
         assertEquals(30, snapshot.reminderMinute)
@@ -259,6 +333,10 @@ class LibrarySnapshotBuilderTest {
         english: String,
         audioText: String,
         prompt: String,
+        category: String? = null,
+        teachingNote: String? = null,
+        teachingMode: TeachingMode? = null,
+        components: List<ItemComponentSeed> = emptyList(),
     ) = StudyItemSeed(
         id = id,
         lessonId = lessonId,
@@ -269,6 +347,17 @@ class LibrarySnapshotBuilderTest {
         english = english,
         audioText = audioText,
         prompt = prompt,
+        category = category,
+        teachingNote = teachingNote,
+        teachingMode = teachingMode,
+        components = components,
+    )
+
+    private fun intro(example: String) = LessonIntroSeed(
+        whatThisIs = "What",
+        howItBehaves = "How",
+        whyItMatters = "Why",
+        example = example,
     )
 
     private fun card(

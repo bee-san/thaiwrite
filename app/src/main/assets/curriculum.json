@@ -1,124 +1,304 @@
 {
   "lessons": [
     {
-      "id": "consonants_1",
+      "id": "starter_symbols_1",
       "order": 1,
-      "stage": "Consonants",
-      "title": "First anchor letters",
-      "description": "Start with four common shapes and learn how Thai letters sit on the baseline.",
-      "itemIds": ["ko_kai", "kho_khai", "ngo_ngu", "cho_chan"]
+      "stage": "Starter symbols",
+      "kind": "symbol_batch",
+      "title": "Write ม, า, น, and ำ",
+      "description": "Start with a tiny set that already lets you write useful words.",
+      "intro": {
+        "whatThisIs": "A consonant is the main letter shape in a Thai syllable. A vowel changes the sound around it.",
+        "howItBehaves": "ม and น sit on the writing line. า sits after the consonant, while ำ sits above and after it as one vowel package.",
+        "whyItMatters": "These four symbols already unlock come, bring, and water.",
+        "example": "มา is ม + า."
+      },
+      "itemIds": ["mo_ma", "sara_aa", "no_nu", "sara_am"]
     },
     {
-      "id": "consonants_2",
+      "id": "starter_words_1",
       "order": 2,
-      "stage": "Consonants",
-      "title": "Breathy contrasts",
-      "description": "Add related kh-series consonants and feel the difference between paired sounds.",
-      "itemIds": ["kho_khuat", "kho_khwai", "kho_khon", "kho_rakhang"]
+      "stage": "Useful words",
+      "kind": "word_bridge",
+      "title": "Bridge into real words",
+      "description": "Use the first symbols immediately in small, high-value words.",
+      "intro": {
+        "whatThisIs": "A word bridge turns fresh symbols into complete Thai words right away.",
+        "howItBehaves": "Transliteration is only a rough Latin guide. The Thai spelling is the real target you are learning to write.",
+        "whyItMatters": "You should see useful Thai before the course starts to feel abstract.",
+        "example": "นำ is น + ำ."
+      },
+      "itemIds": ["ma_come", "nam_bring", "nam_water"]
     },
     {
-      "id": "consonants_3",
+      "id": "starter_symbols_2",
       "order": 3,
-      "stage": "Consonants",
-      "title": "Ch-group foundations",
-      "description": "Build out the first big consonant family used in many beginner words.",
-      "itemIds": ["cho_ching", "cho_chang", "so_so", "cho_choe"]
+      "stage": "Starter symbols",
+      "kind": "symbol_batch",
+      "title": "Add บ, แ, and the first tone marks",
+      "description": "Pick up one common consonant, one front vowel, and the first two marks written above the stack.",
+      "intro": {
+        "whatThisIs": "Tone marks are small marks that sit above a consonant and change how the word sounds.",
+        "howItBehaves": "แ is written before the consonant, even though you still say the consonant first. ่ and ้ sit above the consonant stack.",
+        "whyItMatters": "This gives you home and family words almost immediately.",
+        "example": "แม่ uses แ before ม and ่ above the stack."
+      },
+      "itemIds": ["bo_baimai", "mai_tho", "sara_ae", "mai_ek"]
     },
     {
-      "id": "consonants_4",
+      "id": "starter_words_2",
       "order": 4,
-      "stage": "Consonants",
-      "title": "Voiced and nasal forms",
-      "description": "Learn the letters that often appear in names and daily vocabulary.",
-      "itemIds": ["yo_ying", "do_chada", "to_patak", "tho_than"]
+      "stage": "Useful words",
+      "kind": "word_bridge",
+      "title": "Home, family, and not",
+      "description": "Build words that matter early, even if one especially useful piece arrives a lesson later.",
+      "intro": {
+        "whatThisIs": "Build words use only symbols you already know. Preview words add one missing feature and label it clearly.",
+        "howItBehaves": "If one part is marked coming soon, copy the whole word now and let the next lesson explain that last piece.",
+        "whyItMatters": "บ้าน, แม่, and ไม่ show you how Thai words start coming together.",
+        "example": "ไม่ is mostly familiar already; the front vowel ไ is the only new piece."
+      },
+      "itemIds": ["ban_house", "mae_mother", "mai_not"]
     },
     {
-      "id": "consonants_5",
+      "id": "starter_symbols_3",
       "order": 5,
-      "stage": "Consonants",
-      "title": "Rare historic forms",
-      "description": "Keep moving through the official alphabet, even the letters you will read less often.",
-      "itemIds": ["tho_montho", "tho_phuthao", "no_nen", "do_dek"]
+      "stage": "Starter symbols",
+      "kind": "symbol_batch",
+      "title": "Add พ, อ, ไ, and ป",
+      "description": "Learn another family consonant, the carrier letter, a front vowel, and a common action consonant.",
+      "intro": {
+        "whatThisIs": "อ can be a real consonant, but it also works as the carrier that helps you see where dependent vowels and tone marks sit.",
+        "howItBehaves": "ไ is written before the consonant. อ is the placeholder you practice with when a vowel or tone mark cannot stand alone.",
+        "whyItMatters": "This batch unlocks father, go, and enough.",
+        "example": "ไป is ไ before ป."
+      },
+      "itemIds": ["pho_phan", "o_ang", "sara_ai_maimalai", "po_pla"]
     },
     {
-      "id": "consonants_6",
+      "id": "starter_words_3",
       "order": 6,
-      "stage": "Consonants",
-      "title": "The t and th block",
-      "description": "These shapes recur constantly, so get precise with them early.",
-      "itemIds": ["to_tao", "tho_thung", "tho_thahan", "tho_thong"]
+      "stage": "Useful words",
+      "kind": "word_bridge",
+      "title": "Father, go, and enough",
+      "description": "Use the new front vowel and carrier right away in short everyday words.",
+      "intro": {
+        "whatThisIs": "These are full build words, so every part now has a matching symbol lesson behind it.",
+        "howItBehaves": "Watch how อ sometimes carries a vowel sound at the end of a word instead of acting like a simple consonant.",
+        "whyItMatters": "You can already write go, father, enough, house, mother, not, bring, water, and come.",
+        "example": "พอ is พ + อ."
+      },
+      "itemIds": ["pho_father", "pai_go", "pho_enough"]
     },
     {
-      "id": "consonants_7",
+      "id": "starter_symbols_4",
       "order": 7,
-      "stage": "Consonants",
-      "title": "N, B, P and friends",
-      "description": "Useful high-frequency consonants for real words and family names.",
-      "itemIds": ["no_nu", "bo_baimai", "po_pla", "pho_phueng"]
+      "stage": "Starter symbols",
+      "kind": "symbol_batch",
+      "title": "Add ใ, ะ, ั, and ก",
+      "description": "Finish the beginner utility marks that make Thai function words much easier to read and write.",
+      "intro": {
+        "whatThisIs": "ใ is a second ai vowel used in a smaller set of words. ะ and ั give short a sounds.",
+        "howItBehaves": "ใ is written before the consonant. ะ is written after it. ั sits above the consonant to make a short a sound inside the word.",
+        "whyItMatters": "These marks power words like ใน, กับ, and ครับ.",
+        "example": "กับ uses ก + ั + บ."
+      },
+      "itemIds": ["sara_ai_maimuan", "sara_short_a", "mai_han_akat", "ko_kai"]
     },
     {
-      "id": "consonants_8",
+      "id": "core_symbols_1",
       "order": 8,
-      "stage": "Consonants",
-      "title": "F and Ph forms",
-      "description": "Finish the bilabial block and get ready for whole-word practice.",
-      "itemIds": ["fo_fa", "pho_phan", "fo_fan", "pho_samphao"]
+      "stage": "Core alphabet",
+      "kind": "symbol_batch",
+      "title": "Add ค, ด, ต, and ย",
+      "description": "These high-utility consonants expand the range of useful short words quickly.",
+      "intro": {
+        "whatThisIs": "This is still the utility track, so the letters here are chosen for everyday payoff instead of official alphabet order.",
+        "howItBehaves": "Thai keeps multiple letters for similar sounds. Learn the shape first; the fine sound-class details can come later.",
+        "whyItMatters": "This batch unlocks polite particles and the common word ได้.",
+        "example": "ได้ uses ด with the front vowel ไ and the tone mark ้."
+      },
+      "itemIds": ["kho_khwai", "do_dek", "to_tao", "yo_yak"]
     },
     {
-      "id": "consonants_9",
+      "id": "word_bridge_4",
       "order": 9,
-      "stage": "Consonants",
-      "title": "Flow letters",
-      "description": "These smooth shapes show up everywhere in reading and writing.",
-      "itemIds": ["mo_ma", "yo_yak", "ro_ruea", "lo_ling"]
+      "stage": "Useful words",
+      "kind": "word_bridge",
+      "title": "Inside, with, polite, can",
+      "description": "These short utility words show why the early symbol order is built around usefulness.",
+      "intro": {
+        "whatThisIs": "This bridge focuses on glue words and polite speech rather than names or trivia.",
+        "howItBehaves": "Notice how Thai writes short hidden vowels with marks like ั instead of always adding a full vowel letter.",
+        "whyItMatters": "Words like ใน, กับ, ค่ะ, and ได้ appear constantly.",
+        "example": "ค่ะ is ค + ่ + ะ."
+      },
+      "itemIds": ["nai_inside", "kap_with", "kha_polite", "dai_can"]
     },
     {
-      "id": "consonants_10",
+      "id": "core_symbols_2",
       "order": 10,
-      "stage": "Consonants",
-      "title": "Sibilants and aspirates",
-      "description": "Finish the consonant inventory with the final common symbol families.",
-      "itemIds": ["wo_waen", "so_sala", "so_ruesi", "so_suea"]
+      "stage": "Core alphabet",
+      "kind": "symbol_batch",
+      "title": "Add ล, ว, ร, and ห",
+      "description": "These letters help you form everyday polite words, question words, and connectors.",
+      "intro": {
+        "whatThisIs": "You are still in the common-letter track, where every new shape should pay off in real words soon.",
+        "howItBehaves": "ว often works with vowels or ends a syllable. ห sometimes shapes tone even when its sound is quiet.",
+        "whyItMatters": "These letters unlock polite particles like ครับ and question words like ไหน.",
+        "example": "แล้ว uses แ before ล and ends with ว."
+      },
+      "itemIds": ["lo_ling", "wo_waen", "ro_ruea", "ho_hip"]
     },
     {
-      "id": "consonants_11",
+      "id": "core_symbols_3",
       "order": 11,
-      "stage": "Consonants",
-      "title": "Final consonants",
-      "description": "Close out the official alphabet before moving into vowels and tones.",
-      "itemIds": ["ho_hip", "lo_chula", "o_ang", "ho_nokhuk"]
+      "stage": "Core alphabet",
+      "kind": "symbol_batch",
+      "title": "Add ข, จ, ส, and ท",
+      "description": "Round out another practical layer of the common alphabet before the later completion block.",
+      "intro": {
+        "whatThisIs": "These are still common everyday letters, even if they arrive later than the official alphabet would suggest.",
+        "howItBehaves": "Some of these letters share sound territory with symbols you already know, so keep the shape and word examples tied together.",
+        "whyItMatters": "They let you write request words, questions, and more common sentence glue.",
+        "example": "ขอ is ข + อ."
+      },
+      "itemIds": ["kho_khai", "cho_chan", "so_suea", "tho_thahan"]
     },
     {
-      "id": "vowels_1",
+      "id": "word_bridge_5",
       "order": 12,
-      "stage": "Vowels",
-      "title": "Basic vowel marks",
-      "description": "Meet the most practical vowel symbols you need to start reading words.",
-      "itemIds": ["sara_aa", "sara_i", "sara_ii", "sara_u"]
+      "stage": "Useful words",
+      "kind": "word_bridge",
+      "title": "Please, already, where",
+      "description": "Add more survival-basic words before you fill out the rest of the alphabet.",
+      "intro": {
+        "whatThisIs": "This bridge leans on question words, request words, and polite particles you can use in real conversation.",
+        "howItBehaves": "Thai often hides short vowels inside compact spellings, so keep breaking each word into parts instead of guessing from sound alone.",
+        "whyItMatters": "ครับ, ขอ, แล้ว, and ไหน are all strong beginner payoffs.",
+        "example": "ครับ is ค + ร + ั + บ."
+      },
+      "itemIds": ["khrap_polite", "kho_request", "laeo_already", "nai_where"]
     },
     {
-      "id": "vowels_2",
+      "id": "more_vowels_1",
       "order": 13,
-      "stage": "Vowels",
-      "title": "Front vowels",
-      "description": "Add the vowels that wrap around the consonant frame.",
-      "itemIds": ["sara_uu", "sara_e", "sara_ae", "sara_o"]
+      "stage": "More vowels",
+      "kind": "symbol_batch",
+      "title": "Upper and lower vowel marks",
+      "description": "Now that the first useful words are in motion, fill in more of the common vowel inventory.",
+      "intro": {
+        "whatThisIs": "These vowels sit above or below the consonant instead of before or after it.",
+        "howItBehaves": "You still practice them with the carrier อ so the placement stays obvious.",
+        "whyItMatters": "They appear everywhere once you move beyond the tiny starter vocabulary.",
+        "example": "อิ shows the mark above the carrier."
+      },
+      "itemIds": ["sara_i", "sara_ii", "sara_u", "sara_uu"]
     },
     {
-      "id": "tones_1",
+      "id": "more_vowels_2",
       "order": 14,
-      "stage": "Tone marks",
-      "title": "Tone marks",
-      "description": "See and write the four tone marks before they appear in vocabulary.",
-      "itemIds": ["mai_ek", "mai_tho", "mai_tri", "mai_chattawa"]
+      "stage": "More vowels",
+      "kind": "symbol_batch",
+      "title": "More frame vowels and tone marks",
+      "description": "Finish the remaining common starter vowels and the last two tone marks.",
+      "intro": {
+        "whatThisIs": "เ and โ are frame vowels that wrap around the consonant pattern, and ๊ / ๋ complete the four tone marks.",
+        "howItBehaves": "Frame vowels are written around the consonant frame, not simply after it.",
+        "whyItMatters": "You do not need these on day one, but they round out the system before the final alphabet cleanup.",
+        "example": "เอ puts เ before the carrier and อ after it."
+      },
+      "itemIds": ["sara_e", "sara_o", "mai_tri", "mai_chattawa"]
     },
     {
-      "id": "words_1",
+      "id": "core_symbols_4",
       "order": 15,
-      "stage": "Words",
-      "title": "Loved names and useful words",
-      "description": "A tiny starter set of names and words to connect the alphabet to memory.",
-      "itemIds": ["mae", "pho", "yai", "maeo", "ban", "nam", "chai", "na", "beam", "ann"]
+      "stage": "Core alphabet",
+      "kind": "symbol_batch",
+      "title": "Add ง, ถ, ธ, and ฟ",
+      "description": "Keep filling in common reading letters before the rare completion block starts.",
+      "intro": {
+        "whatThisIs": "These letters are less urgent than the first utility track, but they still matter much earlier than the rare historic forms.",
+        "howItBehaves": "Several of these overlap in sound with letters you already know, so anchor them by shape and example words.",
+        "whyItMatters": "This keeps the practical reading alphabet growing without front-loading the rare letters.",
+        "example": "ง is especially common at the end of a syllable."
+      },
+      "itemIds": ["ngo_ngu", "tho_thung", "tho_thong", "fo_fan"]
+    },
+    {
+      "id": "core_symbols_5",
+      "order": 16,
+      "stage": "Core alphabet",
+      "kind": "symbol_batch",
+      "title": "Add ผ, ฝ, ฮ, and ซ",
+      "description": "Pick up the remaining practical letters that still show up in everyday reading.",
+      "intro": {
+        "whatThisIs": "This batch finishes another slice of the common alphabet before the low-utility cleanup lessons.",
+        "howItBehaves": "Some letters here overlap in sound, but their shapes and word families are different.",
+        "whyItMatters": "You will meet these in everyday names, signs, and loanwords sooner than the rare historical letters.",
+        "example": "ฮ often appears in modern or borrowed words."
+      },
+      "itemIds": ["pho_phueng", "fo_fa", "ho_nokhuk", "so_so"]
+    },
+    {
+      "id": "core_symbols_6",
+      "order": 17,
+      "stage": "Core alphabet",
+      "kind": "symbol_batch",
+      "title": "Add ภ, ฆ, ญ, and ช",
+      "description": "Finish the rest of the still-usable core set before you switch to alphabet completion.",
+      "intro": {
+        "whatThisIs": "These are not the first letters a beginner needs, but they still appear often enough to learn before the rare block.",
+        "howItBehaves": "Thai keeps several historical consonants with overlapping sounds, so treat shape recognition as the main job first.",
+        "whyItMatters": "Once these are in place, the remaining lessons can focus on official-alphabet completion.",
+        "example": "ช is common enough that you will notice it quickly in everyday reading."
+      },
+      "itemIds": ["pho_samphao", "kho_rakhang", "yo_ying", "cho_chang"]
+    },
+    {
+      "id": "alphabet_completion_1",
+      "order": 18,
+      "stage": "Alphabet completion",
+      "kind": "alphabet_completion",
+      "title": "Rare kha and retroflex forms",
+      "description": "Now fill in low-utility official letters without asking a beginner to memorize them first.",
+      "intro": {
+        "whatThisIs": "This block is about finishing the official Thai alphabet, not about front-loading beginner usefulness.",
+        "howItBehaves": "Several of these letters are rare or historical. You still need the official shapes for full literacy.",
+        "whyItMatters": "You can now learn them after the practical track is already doing real work.",
+        "example": "ฃ and ฅ are rare today, but they are still part of the official set."
+      },
+      "itemIds": ["cho_ching", "kho_khuat", "kho_khon", "do_chada"]
+    },
+    {
+      "id": "alphabet_completion_2",
+      "order": 19,
+      "stage": "Alphabet completion",
+      "kind": "alphabet_completion",
+      "title": "More rare official letters",
+      "description": "Continue the cleanup pass through the low-frequency historic forms.",
+      "intro": {
+        "whatThisIs": "These letters matter for complete alphabet coverage, but not for the opening utility path.",
+        "howItBehaves": "You may hear sounds here that overlap with common letters you already know.",
+        "whyItMatters": "The goal is confident recognition and writing of the full official inventory.",
+        "example": "ฏ and ฐ are official letters even if they are not day-one priorities."
+      },
+      "itemIds": ["to_patak", "tho_than", "tho_montho", "tho_phuthao"]
+    },
+    {
+      "id": "alphabet_completion_3",
+      "order": 20,
+      "stage": "Alphabet completion",
+      "kind": "alphabet_completion",
+      "title": "Finish the official set",
+      "description": "Close out the remaining low-utility letters after the useful track is already stable.",
+      "intro": {
+        "whatThisIs": "This last block completes the full alphabet without pretending these were the best opening lessons for a complete beginner.",
+        "howItBehaves": "Keep using the same writing-first process: see the shape, copy it cleanly, then bring it back later through review.",
+        "whyItMatters": "You finish with full coverage while keeping the first half of the course practical.",
+        "example": "ศ, ษ, ฬ, and ฌ are all official letters, even if they are not high-frequency beginner wins."
+      },
+      "itemIds": ["no_nen", "so_sala", "so_ruesi", "lo_chula", "cho_choe"]
     }
   ]
 }

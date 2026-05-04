@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.bee.thaiwrite.data.db.CardType
+import com.bee.thaiwrite.data.db.StudyCardEntity
 import com.bee.thaiwrite.data.repo.LibrarySnapshot
 import com.bee.thaiwrite.data.repo.StudyRepository
 import com.bee.thaiwrite.domain.practice.HandwritingRecognitionService
@@ -40,6 +41,7 @@ data class WritingAssessment(
     val passed: Boolean,
     val topCandidate: String?,
     val candidates: List<String>,
+    val reviewRecorded: Boolean,
 )
 
 class AppViewModel(
@@ -257,34 +259,64 @@ class AppViewModel(
         }
     }
 
-    fun startLesson(lessonId: String) {
+    fun startLesson(lessonId: String, onStarted: () -> Unit = {}) {
         viewModelScope.launch {
-            repository.startLesson(lessonId)
+            runCatching {
+                repository.startLesson(lessonId)
+            }.onSuccess {
+                onStarted()
+            }.onFailure { error ->
+                postMessage(error.message ?: "Unable to start this lesson.")
+            }
         }
     }
 
-    fun recordRecallReview(itemId: String, cardType: String, passed: Boolean) {
+    suspend fun recordRecallReview(
+        itemId: String,
+        cardType: String,
+        passed: Boolean,
+        expectedCard: StudyCardEntity,
+    ): Boolean {
         val parsedCardType = runCatching { CardType.valueOf(cardType) }.getOrElse {
             postMessage("Unknown review card type: $cardType.")
-            return
+            return false
         }
-        viewModelScope.launch {
-            repository.submitRecallReview(
-                itemId = itemId,
-                cardType = parsedCardType,
-                passed = passed,
-                responseMs = 0L,
-            )
+        val accepted = repository.submitRecallReview(
+            itemId = itemId,
+            cardType = parsedCardType,
+            passed = passed,
+            responseMs = 0L,
+            expectedCard = expectedCard,
+        )
+        if (!accepted) {
+            postMessage("That card is not due or was already scored. Move to the next prompt.")
         }
+        return accepted
     }
 
-    suspend fun assessWriting(
+    suspend fun recordManualWritingReview(
         itemId: String,
+        passed: Boolean,
+        expectedCard: StudyCardEntity,
+    ): Boolean {
+        val accepted = repository.submitWritingReview(
+            itemId = itemId,
+            passed = passed,
+            recognizedText = null,
+            responseMs = 0L,
+            expectedCard = expectedCard,
+        )
+        if (!accepted) {
+            postMessage("That card is not due or was already scored. Move to the next prompt.")
+        }
+        return accepted
+    }
+
+    suspend fun recognizeWriting(
         acceptedTargets: List<String>,
         strokes: List<List<StrokePoint>>,
         canvasWidth: Float,
         canvasHeight: Float,
-        responseMs: Long = 0L,
     ): WritingAssessment {
         require(strokes.any { it.isNotEmpty() }) { "Write something before checking the answer." }
         require(canvasWidth > 0f && canvasHeight > 0f) { "The writing canvas is not ready yet. Try again." }
@@ -294,17 +326,38 @@ class AppViewModel(
             height = canvasHeight,
         )
         val passed = HandwritingRecognitionService.matchesAnyExpected(acceptedTargets, result.candidates)
-        repository.submitWritingReview(
-            itemId = itemId,
-            passed = passed,
-            recognizedText = result.topText,
-            responseMs = responseMs,
-        )
         return WritingAssessment(
             passed = passed,
             topCandidate = result.topText,
             candidates = result.candidates,
+            reviewRecorded = false,
         )
+    }
+
+    suspend fun assessDueWriting(
+        itemId: String,
+        acceptedTargets: List<String>,
+        strokes: List<List<StrokePoint>>,
+        canvasWidth: Float,
+        canvasHeight: Float,
+        responseMs: Long = 0L,
+        expectedCard: StudyCardEntity,
+    ): WritingAssessment {
+        val result = recognizeWriting(
+            acceptedTargets = acceptedTargets,
+            strokes = strokes,
+            canvasWidth = canvasWidth,
+            canvasHeight = canvasHeight,
+        )
+        val accepted = repository.submitWritingReview(
+            itemId = itemId,
+            passed = result.passed,
+            recognizedText = result.topCandidate,
+            responseMs = responseMs,
+            expectedCard = expectedCard,
+        )
+        check(accepted) { "That card is not due or was already scored. Move to the next prompt." }
+        return result.copy(reviewRecorded = true)
     }
 
     suspend fun playAudio(text: String) {

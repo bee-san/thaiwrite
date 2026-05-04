@@ -11,6 +11,48 @@ enum class ItemType {
     WORD,
 }
 
+enum class LessonKind {
+    SYMBOL_BATCH,
+    WORD_BRIDGE,
+    ALPHABET_COMPLETION,
+    ;
+
+    companion object {
+        fun fromJson(value: String): LessonKind = when (value.lowercase()) {
+            "symbol_batch" -> SYMBOL_BATCH
+            "word_bridge" -> WORD_BRIDGE
+            "alphabet_completion" -> ALPHABET_COMPLETION
+            else -> error("Unknown lesson kind: $value")
+        }
+    }
+}
+
+enum class TeachingMode {
+    BUILD,
+    PREVIEW,
+    ;
+
+    companion object {
+        fun fromJson(value: String): TeachingMode = when (value.lowercase()) {
+            "build" -> BUILD
+            "preview" -> PREVIEW
+            else -> error("Unknown teaching mode: $value")
+        }
+    }
+}
+
+data class LessonIntroSeed(
+    val whatThisIs: String,
+    val howItBehaves: String,
+    val whyItMatters: String,
+    val example: String,
+)
+
+data class ItemComponentSeed(
+    val itemId: String,
+    val note: String,
+)
+
 data class StudyItemSeed(
     val id: String,
     val lessonId: String,
@@ -21,14 +63,20 @@ data class StudyItemSeed(
     val english: String,
     val audioText: String,
     val prompt: String,
+    val category: String?,
+    val teachingNote: String?,
+    val teachingMode: TeachingMode?,
+    val components: List<ItemComponentSeed>,
 )
 
 data class LessonSeed(
     val id: String,
     val order: Int,
     val stage: String,
+    val kind: LessonKind,
     val title: String,
     val description: String,
+    val intro: LessonIntroSeed,
     val itemIds: List<String>,
 )
 
@@ -55,8 +103,17 @@ object SeedLoader {
                 id = json.getString("id"),
                 order = json.getInt("order"),
                 stage = json.getString("stage"),
+                kind = LessonKind.fromJson(json.getString("kind")),
                 title = json.getString("title"),
                 description = json.getString("description"),
+                intro = json.getJSONObject("intro").let { intro ->
+                    LessonIntroSeed(
+                        whatThisIs = intro.getString("whatThisIs"),
+                        howItBehaves = intro.getString("howItBehaves"),
+                        whyItMatters = intro.getString("whyItMatters"),
+                        example = intro.getString("example"),
+                    )
+                },
                 itemIds = json.getJSONArray("itemIds").mapStrings(),
             )
         }.sortedBy { it.order }
@@ -72,6 +129,15 @@ object SeedLoader {
                 english = json.getString("english"),
                 audioText = json.getString("audioText"),
                 prompt = json.getString("prompt"),
+                category = json.optStringOrNull("category"),
+                teachingNote = json.optStringOrNull("teachingNote"),
+                teachingMode = json.optStringOrNull("teachingMode")?.let(TeachingMode::fromJson),
+                components = json.optJSONArray("components")?.mapObjects { component ->
+                    ItemComponentSeed(
+                        itemId = component.getString("itemId"),
+                        note = component.getString("note"),
+                    )
+                } ?: emptyList(),
             )
         }.sortedBy { it.sortOrder }
 
@@ -104,3 +170,6 @@ private fun JSONArray.mapStrings(): List<String> =
             add(getString(index))
         }
     }
+
+private fun JSONObject.optStringOrNull(key: String): String? =
+    optString(key).takeUnless { it.isBlank() }

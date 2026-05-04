@@ -87,6 +87,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.bee.thaiwrite.BuildConfig
+import com.bee.thaiwrite.data.model.TeachingMode
+import com.bee.thaiwrite.data.repo.ItemBreakdownView
 import com.bee.thaiwrite.data.repo.LessonOverview
 import com.bee.thaiwrite.domain.practice.writingTarget
 import com.bee.thaiwrite.data.repo.ReviewPromptMode
@@ -184,14 +186,14 @@ private fun OnboardingScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "A writing-first Thai alphabet trainer. Trace, write from memory, hear the sound, then let spaced repetition bring it back at the right time.",
+                    text = "A writing-first Thai beginner path. Learn a tiny set of useful symbols, write real words early, then let spaced repetition bring them back at the right time.",
                     style = MaterialTheme.typography.bodyLarge,
                 )
             }
             item {
                 FeatureCard(
                     title = "Baby steps only",
-                    body = "Lessons unlock in order: consonants, vowels, tones, then a tiny names-and-words deck tied to people and things you care about.",
+                    body = "The course starts with small symbol batches and useful words like มา, บ้าน, แม่, ไป, and น้ำ instead of marching through the official alphabet first.",
                 )
             }
             item {
@@ -259,14 +261,14 @@ private fun OnboardingScreen(
             }
             item {
                 Button(
-                    enabled = uiState.handwritingModelReady,
+                    enabled = !uiState.busy,
                     onClick = {
                         val (hour, minute) = presets[reminderChoice]
                         onFinish(hour, minute)
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Start learning")
+                    Text(if (uiState.handwritingModelReady) "Start learning" else "Start with manual checks")
                 }
             }
         }
@@ -286,12 +288,8 @@ private fun StudyNavHost(
             snapshot.dueCards.isNotEmpty() -> navController.navigate("review")
             snapshot.nextLessonId != null -> {
                 val lessonId = snapshot.nextLessonId
-                val lesson = snapshot.lessons.firstOrNull { it.lesson.id == lessonId }
-                if (lesson?.started == true) {
-                    viewModel.startLesson(lessonId)
+                viewModel.startLesson(lessonId) {
                     navController.navigate("practice/$lessonId")
-                } else {
-                    navController.navigate("lesson/$lessonId")
                 }
             }
             else -> navController.navigate(MainDestination.Words.route)
@@ -371,8 +369,9 @@ private fun StudyNavHost(
                 overview = overview,
                 onBack = { navController.popBackStack() },
                 onPractice = {
-                    viewModel.startLesson(lessonId)
-                    navController.navigate("practice/$lessonId")
+                    viewModel.startLesson(lessonId) {
+                        navController.navigate("practice/$lessonId")
+                    }
                 },
                 onPlayAudio = viewModel::playAudio,
             )
@@ -385,6 +384,7 @@ private fun StudyNavHost(
             val overview = snapshot.lessons.firstOrNull { it.lesson.id == lessonId } ?: return@composable
             PracticeScreen(
                 overview = overview,
+                handwritingModelReady = uiState.handwritingModelReady,
                 onBack = { navController.popBackStack() },
                 viewModel = viewModel,
             )
@@ -507,13 +507,13 @@ private fun HomeScreen(
             item {
                 ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFFFFBF4))) {
                     Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("People and words to keep close", style = MaterialTheme.typography.titleLarge)
+                        Text("Useful words to keep close", style = MaterialTheme.typography.titleLarge)
                         Text(
-                            "These starter words are hard-coded examples for the people and things you want to remember first.",
+                            "These starter words are seeded around survival-basic beginner vocabulary instead of names or novelty items.",
                             style = MaterialTheme.typography.bodyLarge,
                         )
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            snapshot.focusWords.take(10).forEach { item ->
+                            snapshot.usefulWords.take(10).forEach { item ->
                                 AssistChip(
                                     onClick = onOpenLibrary,
                                     label = { Text("${item.thai} • ${item.transliteration}") },
@@ -560,12 +560,19 @@ private fun LessonScreen(
                     title = overview.lesson.title,
                     body = overview.lesson.description,
                     accent = accent,
-                    badge = "${overview.masteredCount}/${overview.totalCount} stable",
+                    badge = "${overview.requiredMasteredCount}/${overview.requiredTotalCount} required stable",
                     detail = if (overview.unlocked) {
-                        "${overview.dueCount} cards from this lesson are already circulating in review."
+                        val nextDue = overview.nextDueWritingAtMillis?.let { " Next writing review is due ${formatDueTime(it)}." } ?: ""
+                        "${overview.dueCount} cards from this lesson are already circulating in review.$nextDue"
                     } else {
                         "This lesson stays locked until the previous batch is stable."
                     },
+                )
+            }
+            item {
+                LessonTeacherCard(
+                    lesson = overview.lesson,
+                    accent = accent,
                 )
             }
             items(overview.items) { item ->
@@ -580,17 +587,40 @@ private fun LessonScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            StudyInlinePill(
-                                text = item.item.transliteration,
-                                tint = accent,
-                                background = accent.copy(alpha = 0.12f),
-                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                StudyInlinePill(
+                                    text = item.item.transliteration,
+                                    tint = accent,
+                                    background = accent.copy(alpha = 0.12f),
+                                )
+                                item.item.teachingMode?.let { mode ->
+                                    StudyInlinePill(
+                                        text = if (mode == TeachingMode.BUILD) "Build" else "Preview",
+                                        tint = if (mode == TeachingMode.BUILD) Palm else Clay,
+                                        background = if (mode == TeachingMode.BUILD) StudyMintTint else Color(0xFFFFF1E4),
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(item.item.thai, style = MaterialTheme.typography.headlineMedium, color = Ink)
                             Text(item.item.english, style = MaterialTheme.typography.bodyLarge, color = StudySlate)
                             item.guide?.tip?.let { tip ->
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(tip, style = MaterialTheme.typography.bodyMedium, color = Clay)
+                            }
+                            item.item.teachingNote?.let { tip ->
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(tip, style = MaterialTheme.typography.bodyMedium, color = StudySlate)
+                            }
+                            if (item.breakdown.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                WordBreakdownBlock(
+                                    breakdown = item.breakdown,
+                                    accent = accent,
+                                )
                             }
                         }
                         IconButton(
@@ -608,9 +638,15 @@ private fun LessonScreen(
                 StudyPanel(borderColor = accent.copy(alpha = 0.16f)) {
                     Text("Ready to write?", style = MaterialTheme.typography.titleLarge, color = Ink)
                     Text(
-                        "Work through the prompts one by one, check each answer, and keep the handwriting clean.",
+                        "Starting this lesson creates only the writing cards. After a first good writing pass, the recall card appears, and audio waits until recall succeeds.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = StudySlate,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "The next lesson still unlocks from writing stability, so you may need a short follow-up review later before the next batch opens.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Clay,
                     )
                     Button(
                         onClick = onPractice,
@@ -630,25 +666,45 @@ private fun LessonScreen(
 @Composable
 private fun PracticeScreen(
     overview: LessonOverview,
+    handwritingModelReady: Boolean,
     viewModel: AppViewModel,
     onBack: () -> Unit,
 ) {
-    var index by rememberSaveable { mutableIntStateOf(0) }
+    val nowMillis = System.currentTimeMillis()
+    val firstDueWritingIndex = overview.items.indexOfFirst { item ->
+        item.writingCard?.dueAt?.let { it <= nowMillis } == true
+    }
+    var index by rememberSaveable(overview.lesson.id, overview.nextDueWritingAtMillis, firstDueWritingIndex) {
+        mutableIntStateOf(firstDueWritingIndex.takeIf { it >= 0 } ?: 0)
+    }
+    var freePracticeStarted by rememberSaveable(overview.lesson.id, overview.nextDueWritingAtMillis, firstDueWritingIndex) {
+        mutableStateOf(firstDueWritingIndex >= 0)
+    }
     var showGuide by rememberSaveable { mutableStateOf(false) }
     var showHint by rememberSaveable { mutableStateOf(false) }
     var checking by remember { mutableStateOf(false) }
+    var manualSubmitting by remember { mutableStateOf(false) }
+    var correctionOnly by rememberSaveable { mutableStateOf(false) }
     var result by remember { mutableStateOf<WritingAssessment?>(null) }
     val padState = rememberWritingPadState()
     val scope = rememberCoroutineScope()
     val current = overview.items.getOrNull(index)
+    val scoringCard = current?.writingCard?.takeIf { !correctionOnly && it.dueAt <= nowMillis }
+    val guideVisible = showGuide
     val writingTarget = current?.item?.writingTarget()
     val accent = lessonAccent(overview.lesson.stage)
+    val guideTip = current?.guide?.tip
+    val supportTip = guideTip ?: current?.item?.teachingNote
 
-    LaunchedEffect(index) {
+    LaunchedEffect(index, handwritingModelReady, current?.writingCard?.id) {
         padState.clear()
         result = null
-        showGuide = false
+        val hasDueWriting = current?.writingCard?.dueAt?.let { it <= nowMillis } == true
+        showGuide = !handwritingModelReady && !hasDueWriting
         showHint = false
+        checking = false
+        manualSubmitting = false
+        correctionOnly = false
     }
 
     StudyScreenScaffold(
@@ -665,11 +721,47 @@ private fun PracticeScreen(
             ) {
                 StudyCompletionCard(
                     title = "Lesson complete",
-                    body = "You finished ${overview.lesson.title}. Leave now or run it again later if you want cleaner strokes.",
+                    body = "You finished ${overview.lesson.title}. A short follow-up review may still be needed before the next lesson unlocks.",
                     buttonText = "Back to study",
                     accent = accent,
                     onClick = onBack,
                 )
+            }
+            return@StudyScreenScaffold
+        }
+
+        if (!freePracticeStarted) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                StudyPanel(
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                    borderColor = accent.copy(alpha = 0.16f),
+                ) {
+                    Text("No scored writing due", style = MaterialTheme.typography.titleLarge, color = Ink)
+                    Text(
+                        overview.nextDueWritingAtMillis?.let { "The next writing review for this lesson is due ${formatDueTime(it)}." }
+                            ?: "This lesson has no scored writing card waiting right now.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = StudySlate,
+                    )
+                    Text(
+                        "Free practice will not write a review log.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Clay,
+                    )
+                    Button(
+                        onClick = { freePracticeStarted = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(22.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = accent),
+                    ) {
+                        Text("Free practice")
+                    }
+                }
             }
             return@StudyScreenScaffold
         }
@@ -681,14 +773,26 @@ private fun PracticeScreen(
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            if (index == 0) {
+                item {
+                    LessonTeacherCard(
+                        lesson = overview.lesson,
+                        accent = accent,
+                    )
+                }
+            }
             item {
                 StudyHeroCard(
                     label = "${overview.lesson.stage} practice",
                     title = current.item.prompt,
-                    body = "Item ${index + 1} of ${overview.items.size}. ${if (showGuide) "Guide is visible so you can clean up the shape." else "Write from memory before you check it."}",
+                    body = if (correctionOnly) {
+                        "Correction pass for item ${index + 1}. The failed review was already recorded, so this pass is practice only."
+                    } else {
+                        "Item ${index + 1} of ${overview.items.size}. ${if (guideVisible) "Guide is visible so you can clean up the shape." else "Write from memory before you check it."}"
+                    },
                     accent = accent,
                     badge = "${index + 1}/${overview.items.size}",
-                    detail = writingTarget?.supportText ?: "Write the Thai neatly, then let the recognizer score it.",
+                    detail = writingTarget?.supportText ?: supportTip ?: "Write the Thai neatly, then check it.",
                 )
             }
             item {
@@ -702,7 +806,7 @@ private fun PracticeScreen(
                         background = accent.copy(alpha = 0.12f),
                     )
                     StudyInlinePill(
-                        text = if (showGuide) "Guide on" else "Guide off",
+                        text = if (guideVisible) "Guide on" else "Guide off",
                         tint = Ink,
                         background = StudyMintTint,
                     )
@@ -711,6 +815,18 @@ private fun PracticeScreen(
                         tint = if (showHint) Clay else StudySlate,
                         background = if (showHint) Color(0xFFFFF1E4) else Color(0xFFF7F2EB),
                     )
+                    StudyInlinePill(
+                        text = if (scoringCard != null) "Review scored" else "Practice only",
+                        tint = if (scoringCard != null) Palm else StudySlate,
+                        background = if (scoringCard != null) StudyMintTint else Color(0xFFF7F2EB),
+                    )
+                    if (!handwritingModelReady) {
+                        StudyInlinePill(
+                            text = "Manual check",
+                            tint = Clay,
+                            background = Color(0xFFFFF1E4),
+                        )
+                    }
                 }
             }
             if (showHint) {
@@ -718,15 +834,25 @@ private fun PracticeScreen(
                     StudyPanel(borderColor = accent.copy(alpha = 0.16f)) {
                         Text("Hint", style = MaterialTheme.typography.titleLarge, color = Ink)
                         Text(current.item.transliteration, style = MaterialTheme.typography.bodyLarge, color = Ink)
-                        current.guide?.tip?.let { tip ->
+                        supportTip?.let { tip ->
                             Text(tip, style = MaterialTheme.typography.bodyMedium, color = Clay)
+                        }
+                        if (guideTip != null && guideTip != supportTip) {
+                            Text(guideTip, style = MaterialTheme.typography.bodyMedium, color = StudySlate)
+                        }
+                        if (current.breakdown.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            WordBreakdownBlock(
+                                breakdown = current.breakdown,
+                                accent = accent,
+                            )
                         }
                     }
                 }
             }
             item {
                 StudyCanvasPanel(
-                    title = if (showGuide) "Write over the guide or freehand" else "Write from memory",
+                    title = if (guideVisible) "Write over the guide or freehand" else "Write from memory",
                     body = "Use the full height of the canvas. Clear and retry as often as you want before checking.",
                     accent = accent,
                 ) {
@@ -736,7 +862,7 @@ private fun PracticeScreen(
                             .fillMaxWidth()
                             .height(320.dp),
                         guideText = writingTarget?.displayText ?: current.item.thai,
-                        showGuide = showGuide,
+                        showGuide = guideVisible,
                     )
                 }
             }
@@ -744,7 +870,7 @@ private fun PracticeScreen(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(onClick = { padState.clear() }, shape = RoundedCornerShape(20.dp)) { Text("Clear canvas") }
                     OutlinedButton(onClick = { showGuide = !showGuide }, shape = RoundedCornerShape(20.dp)) {
-                        Text(if (showGuide) "Hide guide" else "Show guide")
+                        Text(if (guideVisible) "Hide guide" else "Show guide")
                     }
                     OutlinedButton(onClick = { showHint = !showHint }, shape = RoundedCornerShape(20.dp)) {
                         Text(if (showHint) "Hide hint" else "Show hint")
@@ -755,33 +881,131 @@ private fun PracticeScreen(
                 }
             }
             if (result == null) {
-                item {
-                    Button(
-                        enabled = !checking && !padState.isEmpty(),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(22.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = accent),
-                        onClick = {
-                            checking = true
-                            scope.launch {
-                                runCatching {
-                                    viewModel.assessWriting(
-                                        itemId = current.item.id,
-                                        acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
-                                        strokes = padState.strokes(),
-                                        canvasWidth = padState.canvasSize.width.toFloat(),
-                                        canvasHeight = padState.canvasSize.height.toFloat(),
-                                    )
-                                }.onSuccess { assessment ->
-                                    result = assessment
-                                }.onFailure { error ->
-                                    viewModel.postMessage(error.message ?: "Unable to check your writing.")
-                                }
-                                checking = false
+                if (scoringCard != null && !handwritingModelReady) {
+                    item {
+                        Text(
+                            "Score this due writing card yourself. The model can be downloaded later from Profile.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Clay,
+                        )
+                    }
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    manualSubmitting = true
+                                    scope.launch {
+                                        val accepted = viewModel.recordManualWritingReview(current.item.id, false, scoringCard)
+                                        if (accepted) {
+                                            correctionOnly = true
+                                            showGuide = true
+                                            showHint = true
+                                            result = WritingAssessment(
+                                                passed = false,
+                                                topCandidate = null,
+                                                candidates = emptyList(),
+                                                reviewRecorded = true,
+                                            )
+                                        }
+                                        manualSubmitting = false
+                                    }
+                                },
+                                enabled = !manualSubmitting,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(22.dp),
+                            ) {
+                                Text("Missed it")
                             }
-                        },
-                    ) {
-                        Text(if (checking) "Checking..." else "Check writing")
+                            Button(
+                                onClick = {
+                                    manualSubmitting = true
+                                    scope.launch {
+                                        val accepted = viewModel.recordManualWritingReview(current.item.id, true, scoringCard)
+                                        if (accepted) {
+                                            result = WritingAssessment(
+                                                passed = true,
+                                                topCandidate = null,
+                                                candidates = emptyList(),
+                                                reviewRecorded = true,
+                                            )
+                                        }
+                                        manualSubmitting = false
+                                    }
+                                },
+                                enabled = !manualSubmitting,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(22.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = accent),
+                            ) {
+                                Text("Got it")
+                            }
+                        }
+                    }
+                } else if (!handwritingModelReady) {
+                    item {
+                        Text(
+                            "Practice with the guide. This pass is not scored because the handwriting model is missing.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Clay,
+                        )
+                    }
+                    item {
+                        Button(
+                            onClick = { index += 1 },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(22.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = accent),
+                        ) {
+                            Text(if (correctionOnly) "Continue after correction" else "Continue after practice")
+                        }
+                    }
+                } else {
+                    item {
+                        Button(
+                            enabled = !checking && !padState.isEmpty(),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(22.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = accent),
+                            onClick = {
+                                checking = true
+                                scope.launch {
+                                    runCatching {
+                                        if (scoringCard != null) {
+                                            viewModel.assessDueWriting(
+                                                itemId = current.item.id,
+                                                acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
+                                                strokes = padState.strokes(),
+                                                canvasWidth = padState.canvasSize.width.toFloat(),
+                                                canvasHeight = padState.canvasSize.height.toFloat(),
+                                                expectedCard = scoringCard,
+                                            )
+                                        } else {
+                                            viewModel.recognizeWriting(
+                                                acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
+                                                strokes = padState.strokes(),
+                                                canvasWidth = padState.canvasSize.width.toFloat(),
+                                                canvasHeight = padState.canvasSize.height.toFloat(),
+                                            )
+                                        }
+                                    }.onSuccess { assessment ->
+                                        result = assessment
+                                        if (assessment.reviewRecorded && !assessment.passed) {
+                                            correctionOnly = true
+                                            showGuide = true
+                                            showHint = true
+                                        }
+                                    }.onFailure { error ->
+                                        viewModel.postMessage(error.message ?: "Unable to check your writing.")
+                                    }
+                                    checking = false
+                                }
+                            },
+                        ) {
+                            Text(if (checking) "Checking..." else "Check writing")
+                        }
                     }
                 }
             }
@@ -791,6 +1015,7 @@ private fun PracticeScreen(
                         passed = assessment.passed,
                         expected = writingTarget?.displayText ?: current.item.thai,
                         topCandidate = assessment.topCandidate,
+                        tip = supportTip,
                     )
                 }
                 item {
@@ -801,13 +1026,25 @@ private fun PracticeScreen(
                         onClick = {
                             if (assessment.passed) {
                                 index += 1
+                            } else if (assessment.reviewRecorded) {
+                                correctionOnly = true
+                                showGuide = true
+                                showHint = true
+                                padState.clear()
+                                result = null
                             } else {
                                 padState.clear()
                                 result = null
                             }
                         },
                     ) {
-                        Text(if (assessment.passed) "Next item" else "Reset and try again")
+                        Text(
+                            when {
+                                assessment.passed -> "Next item"
+                                assessment.reviewRecorded -> "Practice correction"
+                                else -> "Reset and try again"
+                            },
+                        )
                     }
                 }
             }
@@ -828,24 +1065,40 @@ private fun ReviewScreen(
     var displayedCard by remember { mutableStateOf(nextDueCard) }
     var checking by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<WritingAssessment?>(null) }
-    LaunchedEffect(nextDueCard?.card?.id, nextDueCard?.card?.cardType, result == null) {
-        if (result == null) {
+    var correctionOnly by rememberSaveable(displayedCard?.item?.id, displayedCard?.card?.cardType) { mutableStateOf(false) }
+    LaunchedEffect(nextDueCard?.card?.id, nextDueCard?.card?.cardType, result == null, correctionOnly) {
+        if (result == null && !correctionOnly) {
             displayedCard = nextDueCard
         }
     }
     val current = displayedCard
     val writingTarget = current?.item?.writingTarget()
+    val guideTip = current?.guide?.tip
+    val supportTip = guideTip ?: current?.item?.teachingNote
     var revealed by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
     var showHint by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
     var recallSubmitting by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
     val cardMode = current?.promptMode
     val accent = current?.promptMode?.let(::reviewAccent) ?: Palm
+    fun advancePastCurrentCard() {
+        displayedCard = snapshot.dueCards.firstOrNull { card ->
+            current == null || card.item.id != current.item.id || card.card.cardType != current.card.cardType
+        }
+        revealed = false
+        showHint = false
+        checking = false
+        recallSubmitting = false
+        correctionOnly = false
+        result = null
+        padState.clear()
+    }
 
     LaunchedEffect(current?.item?.id, current?.card?.cardType) {
         revealed = false
         showHint = false
         checking = false
         recallSubmitting = false
+        correctionOnly = false
         result = null
         padState.clear()
     }
@@ -894,7 +1147,7 @@ private fun ReviewScreen(
                     accent = accent,
                     badge = "${snapshot.dueCards.size} due",
                     detail = if (current.requiresWriting) {
-                        writingTarget?.supportText ?: "Write the Thai answer before you check it."
+                        writingTarget?.supportText ?: supportTip ?: "Write the Thai answer before you check it."
                     } else {
                         "Reveal only after you have genuinely tried to recall it."
                     },
@@ -926,6 +1179,13 @@ private fun ReviewScreen(
                             tint = Ink,
                             background = Color(0xFFF7F2EB),
                         )
+                        if (!uiState.handwritingModelReady) {
+                            StudyInlinePill(
+                                text = "Manual check",
+                                tint = Clay,
+                                background = Color(0xFFFFF1E4),
+                            )
+                        }
                     }
                 }
             }
@@ -952,8 +1212,18 @@ private fun ReviewScreen(
                     StudyPanel(borderColor = accent.copy(alpha = 0.16f)) {
                         Text("Hint", style = MaterialTheme.typography.titleLarge, color = Ink)
                         Text(current.secondaryPrompt, style = MaterialTheme.typography.bodyLarge, color = Ink)
-                        current.guide?.tip?.let {
+                        supportTip?.let {
                             Text(it, style = MaterialTheme.typography.bodyMedium, color = Clay)
+                        }
+                        if (guideTip != null && guideTip != supportTip) {
+                            Text(guideTip, style = MaterialTheme.typography.bodyMedium, color = StudySlate)
+                        }
+                        if (current.breakdown.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            WordBreakdownBlock(
+                                breakdown = current.breakdown,
+                                accent = accent,
+                            )
                         }
                     }
                 }
@@ -961,8 +1231,16 @@ private fun ReviewScreen(
             if (current.requiresWriting) {
                 item {
                     StudyCanvasPanel(
-                        title = if (revealed) "Guide overlay is visible" else "Write before you reveal the guide",
-                        body = "Keep the answer hidden until you need it. The goal is recall first, then cleanup.",
+                        title = when {
+                            correctionOnly -> "Correction pass"
+                            revealed -> "Guide overlay is visible"
+                            else -> "Write before you reveal the guide"
+                        },
+                        body = if (correctionOnly) {
+                            "This pass is not scored. Use the guide and hint to clean up the shape before moving on."
+                        } else {
+                            "Keep the answer hidden until you need it. The goal is recall first, then cleanup."
+                        },
                         accent = accent,
                     ) {
                         WritingCanvas(
@@ -984,33 +1262,126 @@ private fun ReviewScreen(
                     }
                 }
                 if (result == null) {
-                    item {
-                        Button(
-                            enabled = !checking && !padState.isEmpty(),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(22.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = accent),
-                            onClick = {
-                                checking = true
-                                scope.launch {
-                                    runCatching {
-                                        viewModel.assessWriting(
-                                            itemId = current.item.id,
-                                            acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
-                                            strokes = padState.strokes(),
-                                            canvasWidth = padState.canvasSize.width.toFloat(),
-                                            canvasHeight = padState.canvasSize.height.toFloat(),
-                                        )
-                                    }.onSuccess { assessment ->
-                                        result = assessment
-                                    }.onFailure { error ->
-                                        viewModel.postMessage(error.message ?: "Unable to check your writing.")
-                                    }
-                                    checking = false
+                    if (!uiState.handwritingModelReady && !correctionOnly) {
+                        item {
+                            Text(
+                                "Score this writing card yourself. The model can be downloaded later from Profile.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Clay,
+                            )
+                        }
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        checking = true
+                                        scope.launch {
+                                            val accepted = viewModel.recordManualWritingReview(current.item.id, false, current.card)
+                                            if (accepted) {
+                                                correctionOnly = true
+                                                revealed = true
+                                                showHint = true
+                                                result = WritingAssessment(
+                                                    passed = false,
+                                                    topCandidate = null,
+                                                    candidates = emptyList(),
+                                                    reviewRecorded = true,
+                                                )
+                                            }
+                                            checking = false
+                                        }
+                                    },
+                                    enabled = !checking,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(22.dp),
+                                ) {
+                                    Text("Missed it")
                                 }
-                            },
-                        ) {
-                            Text(if (checking) "Checking..." else "Check answer")
+                                Button(
+                                    onClick = {
+                                        checking = true
+                                        scope.launch {
+                                            val accepted = viewModel.recordManualWritingReview(current.item.id, true, current.card)
+                                            if (accepted) {
+                                                result = WritingAssessment(
+                                                    passed = true,
+                                                    topCandidate = null,
+                                                    candidates = emptyList(),
+                                                    reviewRecorded = true,
+                                                )
+                                            }
+                                            checking = false
+                                        }
+                                    },
+                                    enabled = !checking,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(22.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = accent),
+                                ) {
+                                    Text("Got it")
+                                }
+                            }
+                        }
+                    } else if (!uiState.handwritingModelReady) {
+                        item {
+                            Button(
+                                onClick = {
+                                    advancePastCurrentCard()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(22.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = accent),
+                            ) {
+                                Text("Continue after correction")
+                            }
+                        }
+                    } else {
+                        item {
+                            Button(
+                                enabled = !checking && !padState.isEmpty(),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(22.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = accent),
+                                onClick = {
+                                    checking = true
+                                    scope.launch {
+                                        runCatching {
+                                            if (correctionOnly) {
+                                                viewModel.recognizeWriting(
+                                                    acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
+                                                    strokes = padState.strokes(),
+                                                    canvasWidth = padState.canvasSize.width.toFloat(),
+                                                    canvasHeight = padState.canvasSize.height.toFloat(),
+                                                )
+                                            } else {
+                                                viewModel.assessDueWriting(
+                                                    itemId = current.item.id,
+                                                    acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
+                                                    strokes = padState.strokes(),
+                                                    canvasWidth = padState.canvasSize.width.toFloat(),
+                                                    canvasHeight = padState.canvasSize.height.toFloat(),
+                                                    expectedCard = current.card,
+                                                )
+                                            }
+                                        }.onSuccess { assessment ->
+                                            result = assessment
+                                            if (assessment.reviewRecorded && !assessment.passed) {
+                                                correctionOnly = true
+                                                revealed = true
+                                                showHint = true
+                                            }
+                                        }.onFailure { error ->
+                                            viewModel.postMessage(error.message ?: "Unable to check your writing.")
+                                        }
+                                        checking = false
+                                    }
+                                },
+                            ) {
+                                Text(if (checking) "Checking..." else "Check answer")
+                            }
                         }
                     }
                 }
@@ -1020,19 +1391,36 @@ private fun ReviewScreen(
                             passed = assessment.passed,
                             expected = writingTarget?.displayText ?: current.item.thai,
                             topCandidate = assessment.topCandidate,
+                            tip = supportTip,
                         )
                     }
                     item {
                         Button(
                             onClick = {
-                                result = null
-                                padState.clear()
+                                if (assessment.passed) {
+                                    advancePastCurrentCard()
+                                } else if (assessment.reviewRecorded) {
+                                    correctionOnly = true
+                                    revealed = true
+                                    showHint = true
+                                    result = null
+                                    padState.clear()
+                                } else {
+                                    result = null
+                                    padState.clear()
+                                }
                             },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(22.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = if (assessment.passed) Palm else accent),
                         ) {
-                            Text(if (assessment.passed) "Next card" else "Reset and try again")
+                            Text(
+                                when {
+                                    assessment.passed -> "Next card"
+                                    assessment.reviewRecorded -> "Practice correction"
+                                    else -> "Reset and try again"
+                                },
+                            )
                         }
                     }
                 }
@@ -1051,6 +1439,18 @@ private fun ReviewScreen(
                                 )
                                 Text(current.item.transliteration, style = MaterialTheme.typography.titleLarge, color = accent)
                                 Text(current.item.english, style = MaterialTheme.typography.bodyLarge, color = StudySlate)
+                                supportTip?.let {
+                                    Text(it, style = MaterialTheme.typography.bodyMedium, color = Clay)
+                                }
+                                if (guideTip != null && guideTip != supportTip) {
+                                    Text(guideTip, style = MaterialTheme.typography.bodyMedium, color = StudySlate)
+                                }
+                                if (current.breakdown.isNotEmpty()) {
+                                    WordBreakdownBlock(
+                                        breakdown = current.breakdown,
+                                        accent = accent,
+                                    )
+                                }
                             } else {
                                 Text(
                                     if (current.promptMode == ReviewPromptMode.AUDIO) {
@@ -1089,7 +1489,14 @@ private fun ReviewScreen(
                             OutlinedButton(
                                 onClick = {
                                     recallSubmitting = true
-                                    viewModel.recordRecallReview(current.item.id, current.card.cardType, false)
+                                    scope.launch {
+                                        val accepted = viewModel.recordRecallReview(current.item.id, current.card.cardType, false, current.card)
+                                        if (accepted) {
+                                            advancePastCurrentCard()
+                                        } else {
+                                            recallSubmitting = false
+                                        }
+                                    }
                                 },
                                 enabled = !recallSubmitting,
                                 modifier = Modifier.weight(1f),
@@ -1100,7 +1507,14 @@ private fun ReviewScreen(
                             Button(
                                 onClick = {
                                     recallSubmitting = true
-                                    viewModel.recordRecallReview(current.item.id, current.card.cardType, true)
+                                    scope.launch {
+                                        val accepted = viewModel.recordRecallReview(current.item.id, current.card.cardType, true, current.card)
+                                        if (accepted) {
+                                            advancePastCurrentCard()
+                                        } else {
+                                            recallSubmitting = false
+                                        }
+                                    }
                                 },
                                 enabled = !recallSubmitting,
                                 modifier = Modifier.weight(1f),
@@ -1238,7 +1652,7 @@ private fun LessonCard(
             Text(lesson.lesson.description, style = MaterialTheme.typography.bodyMedium)
             Text(
                 if (lesson.unlocked) {
-                    "${lesson.masteredCount}/${lesson.totalCount} writing cards mastered, ${lesson.dueCount} due"
+                    "${lesson.requiredMasteredCount}/${lesson.requiredTotalCount} required writing cards mastered, ${lesson.dueCount} due"
                 } else {
                     "Locked until the previous lesson is mastered"
                 },
@@ -1536,12 +1950,76 @@ private fun StudyCompletionCard(
     }
 }
 
+@Composable
+private fun LessonTeacherCard(
+    lesson: com.bee.thaiwrite.data.model.LessonSeed,
+    accent: Color,
+) {
+    StudyPanel(borderColor = accent.copy(alpha = 0.16f)) {
+        StudyInlinePill(
+            text = "Mini teacher",
+            tint = accent,
+            background = accent.copy(alpha = 0.12f),
+        )
+        TeacherLine(label = "What this is", body = lesson.intro.whatThisIs)
+        TeacherLine(label = "How it behaves", body = lesson.intro.howItBehaves)
+        TeacherLine(label = "Why it matters", body = lesson.intro.whyItMatters)
+        TeacherLine(label = "Example", body = lesson.intro.example)
+    }
+}
+
+@Composable
+private fun TeacherLine(
+    label: String,
+    body: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = Clay)
+        Text(body, style = MaterialTheme.typography.bodyLarge, color = Ink)
+    }
+}
+
+@Composable
+private fun WordBreakdownBlock(
+    breakdown: List<ItemBreakdownView>,
+    accent: Color,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Word breakdown", style = MaterialTheme.typography.labelLarge, color = accent)
+        breakdown.forEach { part ->
+            val suffix = if (part.comingSoon) " Coming soon." else ""
+            Text(
+                "${part.thai} • ${part.note}$suffix",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (part.comingSoon) Clay else StudySlate,
+            )
+        }
+    }
+}
+
 private fun lessonAccent(stage: String): Color = when (stage) {
-    "Consonants" -> Palm
-    "Vowels" -> Saffron
-    "Tone marks" -> StudyLavender
-    "Words" -> StudyCoralDeep
+    "Starter symbols" -> Palm
+    "Core alphabet" -> Palm
+    "More vowels" -> Saffron
+    "Useful words" -> StudyCoralDeep
+    "Alphabet completion" -> StudyLavender
     else -> Palm
+}
+
+private fun formatDueTime(dueAtMillis: Long): String {
+    val deltaMillis = dueAtMillis - System.currentTimeMillis()
+    if (deltaMillis <= 0L) {
+        return "now"
+    }
+    val minutes = (deltaMillis + 59_999L) / 60_000L
+    return when {
+        minutes <= 1L -> "in less than a minute"
+        minutes < 60L -> "in $minutes minutes"
+        else -> "at ${
+            java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+                .format(java.time.Instant.ofEpochMilli(dueAtMillis).atZone(java.time.ZoneId.systemDefault()))
+        }"
+    }
 }
 
 private fun reviewAccent(mode: ReviewPromptMode): Color = when (mode) {
@@ -1570,6 +2048,7 @@ private fun FeedbackCard(
     passed: Boolean,
     expected: String,
     topCandidate: String?,
+    tip: String? = null,
 ) {
     StudyPanel(
         borderColor = if (passed) Palm.copy(alpha = 0.2f) else Clay.copy(alpha = 0.2f),
@@ -1591,5 +2070,8 @@ private fun FeedbackCard(
             style = MaterialTheme.typography.bodyMedium,
             color = StudySlate,
         )
+        tip?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = Clay)
+        }
     }
 }
