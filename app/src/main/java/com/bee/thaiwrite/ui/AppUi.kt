@@ -73,6 +73,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -87,12 +88,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.bee.thaiwrite.BuildConfig
+import com.bee.thaiwrite.data.db.CardState
 import com.bee.thaiwrite.data.model.TeachingMode
 import com.bee.thaiwrite.data.repo.ItemBreakdownView
 import com.bee.thaiwrite.data.repo.LessonOverview
 import com.bee.thaiwrite.domain.practice.writingTarget
 import com.bee.thaiwrite.data.repo.ReviewPromptMode
 import com.bee.thaiwrite.ui.components.WritingCanvas
+import com.bee.thaiwrite.ui.components.WritingGuideMode
+import com.bee.thaiwrite.ui.components.WritingGuideStroke
+import com.bee.thaiwrite.ui.components.WritingStrokeGuide
 import com.bee.thaiwrite.ui.components.rememberWritingPadState
 import com.bee.thaiwrite.ui.theme.Clay
 import com.bee.thaiwrite.ui.theme.Cloud as StudyCloud
@@ -106,6 +111,35 @@ import com.bee.thaiwrite.ui.theme.Palm
 import com.bee.thaiwrite.ui.theme.Saffron
 import com.bee.thaiwrite.ui.theme.Slate as StudySlate
 import kotlinx.coroutines.launch
+
+private enum class WritingGuidanceStage {
+    TRACE,
+    FADE,
+    CHECK,
+}
+
+private fun initialWritingGuidanceStage(cardState: String?): WritingGuidanceStage =
+    if (cardState == CardState.REVIEW.name) WritingGuidanceStage.CHECK else WritingGuidanceStage.TRACE
+
+private fun WritingGuidanceStage.showsGuide(): Boolean = this != WritingGuidanceStage.CHECK
+
+private fun WritingGuidanceStage.label(): String = when (this) {
+    WritingGuidanceStage.TRACE -> "Trace"
+    WritingGuidanceStage.FADE -> "Fade"
+    WritingGuidanceStage.CHECK -> "Check"
+}
+
+private fun WritingGuidanceStage.next(): WritingGuidanceStage = when (this) {
+    WritingGuidanceStage.TRACE -> WritingGuidanceStage.FADE
+    WritingGuidanceStage.FADE -> WritingGuidanceStage.CHECK
+    WritingGuidanceStage.CHECK -> WritingGuidanceStage.CHECK
+}
+
+private fun WritingGuidanceStage.toGuideMode(): WritingGuideMode = when (this) {
+    WritingGuidanceStage.TRACE -> WritingGuideMode.Trace
+    WritingGuidanceStage.FADE -> WritingGuideMode.Fade
+    WritingGuidanceStage.CHECK -> WritingGuideMode.Hidden
+}
 
 @Composable
 fun ThaiWriteApp(viewModel: AppViewModel) {
@@ -680,7 +714,7 @@ private fun PracticeScreen(
     var freePracticeStarted by rememberSaveable(overview.lesson.id, overview.nextDueWritingAtMillis, firstDueWritingIndex) {
         mutableStateOf(firstDueWritingIndex >= 0)
     }
-    var showGuide by rememberSaveable { mutableStateOf(false) }
+    var guidanceStage by rememberSaveable { mutableStateOf(WritingGuidanceStage.TRACE) }
     var showHint by rememberSaveable { mutableStateOf(false) }
     var checking by remember { mutableStateOf(false) }
     var manualSubmitting by remember { mutableStateOf(false) }
@@ -689,18 +723,31 @@ private fun PracticeScreen(
     val padState = rememberWritingPadState()
     val scope = rememberCoroutineScope()
     val current = overview.items.getOrNull(index)
-    val scoringCard = current?.writingCard?.takeIf { !correctionOnly && it.dueAt <= nowMillis }
-    val guideVisible = showGuide
+    val dueWritingCard = current?.writingCard?.takeIf { it.dueAt <= nowMillis }
+    val isCheckStage = guidanceStage == WritingGuidanceStage.CHECK
+    val scoringCard = dueWritingCard?.takeIf { !correctionOnly && isCheckStage }
+    val guideVisible = guidanceStage.showsGuide()
     val writingTarget = current?.item?.writingTarget()
     val accent = lessonAccent(overview.lesson.stage)
     val guideTip = current?.guide?.tip
     val supportTip = guideTip ?: current?.item?.teachingNote
+    val strokeGuide = current?.guide?.strokeGuide?.toWritingStrokeGuide()
 
-    LaunchedEffect(index, handwritingModelReady, current?.writingCard?.id) {
+    fun movePracticeStage(nextStage: WritingGuidanceStage) {
+        if (nextStage == guidanceStage) {
+            return
+        }
+        if (nextStage == WritingGuidanceStage.CHECK || guidanceStage == WritingGuidanceStage.CHECK) {
+            padState.clear()
+            result = null
+        }
+        guidanceStage = nextStage
+    }
+
+    LaunchedEffect(index, current?.writingCard?.id, current?.writingCard?.state) {
         padState.clear()
         result = null
-        val hasDueWriting = current?.writingCard?.dueAt?.let { it <= nowMillis } == true
-        showGuide = !handwritingModelReady && !hasDueWriting
+        guidanceStage = initialWritingGuidanceStage(current?.writingCard?.state)
         showHint = false
         checking = false
         manualSubmitting = false
@@ -786,13 +833,13 @@ private fun PracticeScreen(
                     label = "${overview.lesson.stage} practice",
                     title = current.item.prompt,
                     body = if (correctionOnly) {
-                        "Correction pass for item ${index + 1}. The failed review was already recorded, so this pass is practice only."
+                        "Practice pass for item ${index + 1}. The review was already saved, so this part is just for rebuilding the shape."
                     } else {
-                        "Item ${index + 1} of ${overview.items.size}. ${if (guideVisible) "Guide is visible so you can clean up the shape." else "Write from memory before you check it."}"
+                        "Item ${index + 1} of ${overview.items.size}. ${writingStagePracticeBody(guidanceStage, dueWritingCard != null)}"
                     },
                     accent = accent,
                     badge = "${index + 1}/${overview.items.size}",
-                    detail = writingTarget?.supportText ?: supportTip ?: "Write the Thai neatly, then check it.",
+                    detail = writingTarget?.supportText ?: supportTip ?: "Trace, fade, then check a fresh attempt.",
                 )
             }
             item {
@@ -806,7 +853,7 @@ private fun PracticeScreen(
                         background = accent.copy(alpha = 0.12f),
                     )
                     StudyInlinePill(
-                        text = if (guideVisible) "Guide on" else "Guide off",
+                        text = guidanceStage.label(),
                         tint = Ink,
                         background = StudyMintTint,
                     )
@@ -816,9 +863,14 @@ private fun PracticeScreen(
                         background = if (showHint) Color(0xFFFFF1E4) else Color(0xFFF7F2EB),
                     )
                     StudyInlinePill(
-                        text = if (scoringCard != null) "Review scored" else "Practice only",
-                        tint = if (scoringCard != null) Palm else StudySlate,
-                        background = if (scoringCard != null) StudyMintTint else Color(0xFFF7F2EB),
+                        text = when {
+                            correctionOnly -> "Practice only"
+                            dueWritingCard != null && isCheckStage -> "Ready to score"
+                            dueWritingCard != null -> "Scores in Check"
+                            else -> "Practice only"
+                        },
+                        tint = if (dueWritingCard != null && isCheckStage && !correctionOnly) Palm else StudySlate,
+                        background = if (dueWritingCard != null && isCheckStage && !correctionOnly) StudyMintTint else Color(0xFFF7F2EB),
                     )
                     if (!handwritingModelReady) {
                         StudyInlinePill(
@@ -852,8 +904,8 @@ private fun PracticeScreen(
             }
             item {
                 StudyCanvasPanel(
-                    title = if (guideVisible) "Write over the guide or freehand" else "Write from memory",
-                    body = "Use the full height of the canvas. Clear and retry as often as you want before checking.",
+                    title = writingStageTitle(guidanceStage, correctionOnly),
+                    body = writingStageCanvasBody(guidanceStage, correctionOnly),
                     accent = accent,
                 ) {
                     WritingCanvas(
@@ -863,14 +915,29 @@ private fun PracticeScreen(
                             .height(320.dp),
                         guideText = writingTarget?.displayText ?: current.item.thai,
                         showGuide = guideVisible,
+                        guideMode = guidanceStage.toGuideMode(),
+                        strokeGuide = strokeGuide,
                     )
                 }
             }
             item {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(onClick = { padState.clear() }, shape = RoundedCornerShape(20.dp)) { Text("Clear canvas") }
-                    OutlinedButton(onClick = { showGuide = !showGuide }, shape = RoundedCornerShape(20.dp)) {
-                        Text(if (guideVisible) "Hide guide" else "Show guide")
+                    if (guidanceStage == WritingGuidanceStage.CHECK) {
+                        OutlinedButton(
+                            onClick = { movePracticeStage(WritingGuidanceStage.TRACE) },
+                            shape = RoundedCornerShape(20.dp),
+                        ) {
+                            Text("Practice with guide")
+                        }
+                    } else {
+                        Button(
+                            onClick = { movePracticeStage(guidanceStage.next()) },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = accent),
+                        ) {
+                            Text(if (guidanceStage.next() == WritingGuidanceStage.CHECK) "Clear and check" else "Fade guide")
+                        }
                     }
                     OutlinedButton(onClick = { showHint = !showHint }, shape = RoundedCornerShape(20.dp)) {
                         Text(if (showHint) "Hide hint" else "Show hint")
@@ -881,10 +948,29 @@ private fun PracticeScreen(
                 }
             }
             if (result == null) {
-                if (scoringCard != null && !handwritingModelReady) {
+                if (!isCheckStage) {
                     item {
                         Text(
-                            "Score this due writing card yourself. The model can be downloaded later from Profile.",
+                            "This is guided practice. The canvas will clear before Check so only a fresh unguided try can be submitted.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Clay,
+                        )
+                    }
+                } else if (correctionOnly) {
+                    item {
+                        Button(
+                            onClick = { index += 1 },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(22.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = accent),
+                        ) {
+                            Text("Continue after practice")
+                        }
+                    }
+                } else if (scoringCard != null && !handwritingModelReady) {
+                    item {
+                        Text(
+                            "Score this unguided writing try yourself. The model can be downloaded later from Profile.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Clay,
                         )
@@ -901,7 +987,7 @@ private fun PracticeScreen(
                                         val accepted = viewModel.recordManualWritingReview(current.item.id, false, scoringCard)
                                         if (accepted) {
                                             correctionOnly = true
-                                            showGuide = true
+                                            guidanceStage = WritingGuidanceStage.TRACE
                                             showHint = true
                                             result = WritingAssessment(
                                                 passed = false,
@@ -917,7 +1003,7 @@ private fun PracticeScreen(
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(22.dp),
                             ) {
-                                Text("Missed it")
+                                Text("Need practice")
                             }
                             Button(
                                 onClick = {
@@ -947,7 +1033,7 @@ private fun PracticeScreen(
                 } else if (!handwritingModelReady) {
                     item {
                         Text(
-                            "Practice with the guide. This pass is not scored because the handwriting model is missing.",
+                            "This practice pass is not scored because the handwriting model is missing.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Clay,
                         )
@@ -959,7 +1045,7 @@ private fun PracticeScreen(
                             shape = RoundedCornerShape(22.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = accent),
                         ) {
-                            Text(if (correctionOnly) "Continue after correction" else "Continue after practice")
+                            Text("Continue after practice")
                         }
                     }
                 } else {
@@ -994,7 +1080,7 @@ private fun PracticeScreen(
                                         result = assessment
                                         if (assessment.reviewRecorded && !assessment.passed) {
                                             correctionOnly = true
-                                            showGuide = true
+                                            guidanceStage = WritingGuidanceStage.TRACE
                                             showHint = true
                                         }
                                     }.onFailure { error ->
@@ -1028,7 +1114,7 @@ private fun PracticeScreen(
                                 index += 1
                             } else if (assessment.reviewRecorded) {
                                 correctionOnly = true
-                                showGuide = true
+                                guidanceStage = WritingGuidanceStage.TRACE
                                 showHint = true
                                 padState.clear()
                                 result = null
@@ -1041,7 +1127,7 @@ private fun PracticeScreen(
                         Text(
                             when {
                                 assessment.passed -> "Next item"
-                                assessment.reviewRecorded -> "Practice correction"
+                                assessment.reviewRecorded -> "Practice with guide"
                                 else -> "Reset and try again"
                             },
                         )
@@ -1075,16 +1161,39 @@ private fun ReviewScreen(
     val writingTarget = current?.item?.writingTarget()
     val guideTip = current?.guide?.tip
     val supportTip = guideTip ?: current?.item?.teachingNote
+    val strokeGuide = current?.guide?.strokeGuide?.toWritingStrokeGuide()
     var revealed by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
+    var guidanceStage by rememberSaveable(current?.item?.id, current?.card?.cardType, current?.card?.state) {
+        mutableStateOf(initialWritingGuidanceStage(current?.card?.state))
+    }
     var showHint by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
     var recallSubmitting by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
     val cardMode = current?.promptMode
     val accent = current?.promptMode?.let(::reviewAccent) ?: Palm
+    val isCheckStage = guidanceStage == WritingGuidanceStage.CHECK
+    val guideVisible = guidanceStage.showsGuide()
+    val reviewScoringCard = if (current?.requiresWriting == true && !correctionOnly && isCheckStage) {
+        current.card
+    } else {
+        null
+    }
+    fun moveReviewStage(nextStage: WritingGuidanceStage) {
+        if (nextStage == guidanceStage) {
+            return
+        }
+        if (nextStage == WritingGuidanceStage.CHECK || guidanceStage == WritingGuidanceStage.CHECK) {
+            padState.clear()
+            result = null
+        }
+        guidanceStage = nextStage
+    }
     fun advancePastCurrentCard() {
-        displayedCard = snapshot.dueCards.firstOrNull { card ->
+        val nextCard = snapshot.dueCards.firstOrNull { card ->
             current == null || card.item.id != current.item.id || card.card.cardType != current.card.cardType
         }
+        displayedCard = nextCard
         revealed = false
+        guidanceStage = initialWritingGuidanceStage(nextCard?.card?.state)
         showHint = false
         checking = false
         recallSubmitting = false
@@ -1095,6 +1204,7 @@ private fun ReviewScreen(
 
     LaunchedEffect(current?.item?.id, current?.card?.cardType) {
         revealed = false
+        guidanceStage = initialWritingGuidanceStage(current?.card?.state)
         showHint = false
         checking = false
         recallSubmitting = false
@@ -1175,7 +1285,7 @@ private fun ReviewScreen(
                     )
                     if (current.requiresWriting) {
                         StudyInlinePill(
-                            text = if (revealed) "Guide shown" else "Guide hidden",
+                            text = guidanceStage.label(),
                             tint = Ink,
                             background = Color(0xFFF7F2EB),
                         )
@@ -1231,16 +1341,8 @@ private fun ReviewScreen(
             if (current.requiresWriting) {
                 item {
                     StudyCanvasPanel(
-                        title = when {
-                            correctionOnly -> "Correction pass"
-                            revealed -> "Guide overlay is visible"
-                            else -> "Write before you reveal the guide"
-                        },
-                        body = if (correctionOnly) {
-                            "This pass is not scored. Use the guide and hint to clean up the shape before moving on."
-                        } else {
-                            "Keep the answer hidden until you need it. The goal is recall first, then cleanup."
-                        },
+                        title = writingStageTitle(guidanceStage, correctionOnly),
+                        body = writingStageCanvasBody(guidanceStage, correctionOnly),
                         accent = accent,
                     ) {
                         WritingCanvas(
@@ -1249,23 +1351,59 @@ private fun ReviewScreen(
                                 .fillMaxWidth()
                                 .height(320.dp),
                             guideText = writingTarget?.displayText ?: current.item.thai,
-                            showGuide = revealed,
+                            showGuide = guideVisible,
+                            guideMode = guidanceStage.toGuideMode(),
+                            strokeGuide = strokeGuide,
                         )
                     }
                 }
                 item {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedButton(onClick = { padState.clear() }, shape = RoundedCornerShape(20.dp)) { Text("Clear canvas") }
-                        OutlinedButton(onClick = { revealed = !revealed }, shape = RoundedCornerShape(20.dp)) {
-                            Text(if (revealed) "Hide guide" else "Show guide")
+                        if (guidanceStage == WritingGuidanceStage.CHECK) {
+                            OutlinedButton(
+                                onClick = { moveReviewStage(WritingGuidanceStage.TRACE) },
+                                shape = RoundedCornerShape(20.dp),
+                            ) {
+                                Text("Practice with guide")
+                            }
+                        } else {
+                            Button(
+                                onClick = { moveReviewStage(guidanceStage.next()) },
+                                shape = RoundedCornerShape(20.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = accent),
+                            ) {
+                                Text(if (guidanceStage.next() == WritingGuidanceStage.CHECK) "Clear and check" else "Fade guide")
+                            }
                         }
                     }
                 }
                 if (result == null) {
-                    if (!uiState.handwritingModelReady && !correctionOnly) {
+                    if (!isCheckStage) {
                         item {
                             Text(
-                                "Score this writing card yourself. The model can be downloaded later from Profile.",
+                                "This is guided practice. The canvas will clear before Check so the saved review uses a fresh unguided try.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Clay,
+                            )
+                        }
+                    } else if (correctionOnly) {
+                        item {
+                            Button(
+                                onClick = {
+                                    advancePastCurrentCard()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(22.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = accent),
+                            ) {
+                                Text("Continue after practice")
+                            }
+                        }
+                    } else if (!uiState.handwritingModelReady && reviewScoringCard != null) {
+                        item {
+                            Text(
+                                "Score this unguided writing try yourself. The model can be downloaded later from Profile.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Clay,
                             )
@@ -1279,10 +1417,10 @@ private fun ReviewScreen(
                                     onClick = {
                                         checking = true
                                         scope.launch {
-                                            val accepted = viewModel.recordManualWritingReview(current.item.id, false, current.card)
+                                            val accepted = viewModel.recordManualWritingReview(current.item.id, false, reviewScoringCard)
                                             if (accepted) {
                                                 correctionOnly = true
-                                                revealed = true
+                                                guidanceStage = WritingGuidanceStage.TRACE
                                                 showHint = true
                                                 result = WritingAssessment(
                                                     passed = false,
@@ -1298,13 +1436,13 @@ private fun ReviewScreen(
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(22.dp),
                                 ) {
-                                    Text("Missed it")
+                                    Text("Need practice")
                                 }
                                 Button(
                                     onClick = {
                                         checking = true
                                         scope.launch {
-                                            val accepted = viewModel.recordManualWritingReview(current.item.id, true, current.card)
+                                            val accepted = viewModel.recordManualWritingReview(current.item.id, true, reviewScoringCard)
                                             if (accepted) {
                                                 result = WritingAssessment(
                                                     passed = true,
@@ -1335,7 +1473,7 @@ private fun ReviewScreen(
                                 shape = RoundedCornerShape(22.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = accent),
                             ) {
-                                Text("Continue after correction")
+                                Text("Continue after practice")
                             }
                         }
                     } else {
@@ -1349,28 +1487,28 @@ private fun ReviewScreen(
                                     checking = true
                                     scope.launch {
                                         runCatching {
-                                            if (correctionOnly) {
-                                                viewModel.recognizeWriting(
-                                                    acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
-                                                    strokes = padState.strokes(),
-                                                    canvasWidth = padState.canvasSize.width.toFloat(),
-                                                    canvasHeight = padState.canvasSize.height.toFloat(),
-                                                )
-                                            } else {
+                                            if (reviewScoringCard != null) {
                                                 viewModel.assessDueWriting(
                                                     itemId = current.item.id,
                                                     acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
                                                     strokes = padState.strokes(),
                                                     canvasWidth = padState.canvasSize.width.toFloat(),
                                                     canvasHeight = padState.canvasSize.height.toFloat(),
-                                                    expectedCard = current.card,
+                                                    expectedCard = reviewScoringCard,
+                                                )
+                                            } else {
+                                                viewModel.recognizeWriting(
+                                                    acceptedTargets = writingTarget?.acceptedTexts ?: listOf(current.item.thai),
+                                                    strokes = padState.strokes(),
+                                                    canvasWidth = padState.canvasSize.width.toFloat(),
+                                                    canvasHeight = padState.canvasSize.height.toFloat(),
                                                 )
                                             }
                                         }.onSuccess { assessment ->
                                             result = assessment
                                             if (assessment.reviewRecorded && !assessment.passed) {
                                                 correctionOnly = true
-                                                revealed = true
+                                                guidanceStage = WritingGuidanceStage.TRACE
                                                 showHint = true
                                             }
                                         }.onFailure { error ->
@@ -1401,7 +1539,7 @@ private fun ReviewScreen(
                                     advancePastCurrentCard()
                                 } else if (assessment.reviewRecorded) {
                                     correctionOnly = true
-                                    revealed = true
+                                    guidanceStage = WritingGuidanceStage.TRACE
                                     showHint = true
                                     result = null
                                     padState.clear()
@@ -1417,7 +1555,7 @@ private fun ReviewScreen(
                             Text(
                                 when {
                                     assessment.passed -> "Next card"
-                                    assessment.reviewRecorded -> "Practice correction"
+                                    assessment.reviewRecorded -> "Practice with guide"
                                     else -> "Reset and try again"
                                 },
                             )
@@ -2006,6 +2144,17 @@ private fun lessonAccent(stage: String): Color = when (stage) {
     else -> Palm
 }
 
+private fun com.bee.thaiwrite.data.model.StrokeGuideSeed.toWritingStrokeGuide(): WritingStrokeGuide =
+    WritingStrokeGuide(
+        strokes = strokes.map { stroke ->
+            WritingGuideStroke(
+                points = stroke.points.map { point ->
+                    Offset(point.x, point.y)
+                },
+            )
+        },
+    )
+
 private fun formatDueTime(dueAtMillis: Long): String {
     val deltaMillis = dueAtMillis - System.currentTimeMillis()
     if (deltaMillis <= 0L) {
@@ -2034,11 +2183,51 @@ private fun reviewModeLabel(mode: ReviewPromptMode): String = when (mode) {
     ReviewPromptMode.AUDIO -> "Audio card"
 }
 
+private fun writingStagePracticeBody(
+    stage: WritingGuidanceStage,
+    hasDueWriting: Boolean,
+): String = when (stage) {
+    WritingGuidanceStage.TRACE ->
+        "Trace the guide first and notice the shape before trying it lighter."
+    WritingGuidanceStage.FADE ->
+        "Use the guide as a quieter reference, then move to a clean canvas for Check."
+    WritingGuidanceStage.CHECK ->
+        if (hasDueWriting) {
+            "Write without the guide on a clean canvas. This is the only stage that can save the review."
+        } else {
+            "Write without the guide on a clean canvas. This check is practice only."
+        }
+}
+
+private fun writingStageTitle(
+    stage: WritingGuidanceStage,
+    correctionOnly: Boolean,
+): String = when {
+    correctionOnly -> "Guided practice"
+    stage == WritingGuidanceStage.TRACE -> "Trace the shape"
+    stage == WritingGuidanceStage.FADE -> "Fade the guide"
+    else -> "Check without guide"
+}
+
+private fun writingStageCanvasBody(
+    stage: WritingGuidanceStage,
+    correctionOnly: Boolean,
+): String = when {
+    correctionOnly ->
+        "This pass is practice only. Use the guide, then continue when the shape feels familiar again."
+    stage == WritingGuidanceStage.TRACE ->
+        "Write over the guide slowly. This stage never saves a review."
+    stage == WritingGuidanceStage.FADE ->
+        "Use the guide as a quiet reference. Moving to Check clears the canvas first."
+    else ->
+        "The guide is hidden. Submit only this fresh unguided attempt."
+}
+
 private fun reviewModeBody(card: com.bee.thaiwrite.data.repo.ReviewCardView): String = when (card.promptMode) {
     ReviewPromptMode.RECOGNITION ->
         "Try to recall the Thai before revealing it. Score yourself only after you have genuinely tried."
     ReviewPromptMode.WRITING ->
-        "Write the Thai from memory first. Reveal the guide only if you need a correction pass."
+        writingStagePracticeBody(initialWritingGuidanceStage(card.card.state), hasDueWriting = true)
     ReviewPromptMode.AUDIO ->
         "Listen, say it back, and picture the Thai before flipping the answer."
 }
