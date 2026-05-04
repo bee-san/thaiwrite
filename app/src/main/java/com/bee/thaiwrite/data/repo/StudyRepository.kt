@@ -1,6 +1,7 @@
 package com.bee.thaiwrite.data.repo
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.bee.thaiwrite.data.db.CardState
 import com.bee.thaiwrite.data.db.CardType
 import com.bee.thaiwrite.data.db.DailyStreakEntity
@@ -9,6 +10,7 @@ import com.bee.thaiwrite.data.db.ModelDownloadStateEntity
 import com.bee.thaiwrite.data.db.ReviewLogEntity
 import com.bee.thaiwrite.data.db.StudyCardEntity
 import com.bee.thaiwrite.data.db.StudyDao
+import com.bee.thaiwrite.data.db.StudyDatabase
 import com.bee.thaiwrite.data.model.GuideSeed
 import com.bee.thaiwrite.data.model.LessonSeed
 import com.bee.thaiwrite.data.model.SeedBundle
@@ -20,8 +22,12 @@ import com.bee.thaiwrite.system.SettingsState
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 
 data class LessonItemProgress(
     val item: StudyItemSeed,
@@ -29,6 +35,7 @@ data class LessonItemProgress(
     val recognitionCard: StudyCardEntity?,
     val writingCard: StudyCardEntity?,
     val audioCard: StudyCardEntity?,
+    val breakdown: List<ItemBreakdownView>,
 )
 
 enum class ReviewPromptMode {
@@ -37,13 +44,24 @@ enum class ReviewPromptMode {
     AUDIO,
 }
 
+data class ItemBreakdownView(
+    val thai: String,
+    val transliteration: String,
+    val english: String,
+    val note: String,
+    val comingSoon: Boolean,
+)
+
 data class LessonOverview(
     val lesson: LessonSeed,
     val unlocked: Boolean,
     val started: Boolean,
     val masteredCount: Int,
     val totalCount: Int,
+    val requiredMasteredCount: Int,
+    val requiredTotalCount: Int,
     val dueCount: Int,
+    val nextDueWritingAtMillis: Long?,
     val items: List<LessonItemProgress>,
 )
 
@@ -55,6 +73,7 @@ data class ReviewCardView(
     val primaryPrompt: String,
     val secondaryPrompt: String,
     val requiresWriting: Boolean,
+    val breakdown: List<ItemBreakdownView>,
 )
 
 data class LibrarySnapshot(
@@ -73,12 +92,22 @@ data class LibrarySnapshot(
     val dueRecognitionCount: Int,
     val dueWritingCount: Int,
     val dueAudioCount: Int,
-    val focusWords: List<StudyItemSeed>,
+    val usefulWords: List<StudyItemSeed>,
     val nextLessonId: String?,
+    val nextDueAtMillis: Long?,
+)
+
+private data class SnapshotInputs(
+    val cards: List<StudyCardEntity>,
+    val progress: List<LessonProgressEntity>,
+    val streak: DailyStreakEntity,
+    val modelState: ModelDownloadStateEntity?,
+    val settingsState: SettingsState,
 )
 
 class StudyRepository(
     context: Context,
+    private val database: StudyDatabase,
     private val dao: StudyDao,
     private val settings: AppSettings,
     private val scheduler: FsrsPassFailScheduler,
@@ -88,23 +117,38 @@ class StudyRepository(
     private val itemsById = seeds.items.associateBy { it.id }
     private val zoneId = ZoneId.systemDefault()
 
+    private val cardsFlow = dao.observeCards()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     val snapshot: Flow<LibrarySnapshot> = combine(
-        dao.observeCards(),
-        dao.observeLessonProgress(),
-        dao.observeStreak(),
-        dao.observeModelState(),
-        settings.settings,
-    ) { cards, progress, streak, modelState, settingsState ->
+        combine(
+            cardsFlow,
+            dao.observeLessonProgress(),
+            dao.observeStreak(),
+            dao.observeModelState(),
+            settings.settings,
+        ) { cards, progress, streak, modelState, settingsState ->
+            SnapshotInputs(
+                cards = cards,
+                progress = progress,
+                streak = streak ?: DailyStreakEntity(currentStreak = 0, maxStreak = 0, lastStudyDay = null),
+                modelState = modelState,
+                settingsState = settingsState,
+            )
+        },
+        cardsFlow.flatMapLatest(::snapshotClock),
+    ) { inputs, nowMillis ->
         buildSnapshot(
-            cards = cards,
-            progress = progress,
-            streak = streak ?: DailyStreakEntity(currentStreak = 0, maxStreak = 0, lastStudyDay = null),
-            modelState = modelState,
-            settingsState = settingsState,
+            cards = inputs.cards,
+            progress = inputs.progress,
+            streak = inputs.streak,
+            modelState = inputs.modelState,
+            settingsState = inputs.settingsState,
+            nowMillis = nowMillis,
         )
     }
 
-    suspend fun seedIfNeeded() {
+    suspend fun seedIfNeeded() = database.withTransaction {
         if (dao.getStreak() == null) {
             dao.upsertStreak(DailyStreakEntity(id = 1, currentStreak = 0, maxStreak = 0, lastStudyDay = null))
         }
@@ -130,14 +174,16 @@ class StudyRepository(
 
     suspend fun startLesson(lessonId: String) {
         val lesson = lessonsById.getValue(lessonId)
-        ensureCardsForLesson(lesson)
-        dao.upsertLessonProgress(
-            LessonProgressEntity(
-                lessonId = lesson.id,
-                lessonOrder = lesson.order,
-                startedAt = Instant.now().toEpochMilli(),
-            ),
-        )
+        database.withTransaction {
+            ensureCardsForLesson(lesson)
+            dao.upsertLessonProgress(
+                LessonProgressEntity(
+                    lessonId = lesson.id,
+                    lessonOrder = lesson.order,
+                    startedAt = Instant.now().toEpochMilli(),
+                ),
+            )
+        }
     }
 
     suspend fun submitWritingReview(
@@ -146,31 +192,31 @@ class StudyRepository(
         recognizedText: String?,
         responseMs: Long,
         reviewedAt: Instant = Instant.now(),
-    ) {
-        reviewCard(
+        expectedCard: StudyCardEntity? = null,
+    ): Boolean = reviewCard(
             itemId = itemId,
             cardType = CardType.WRITING,
             passed = passed,
             recognizedText = recognizedText,
             responseMs = responseMs,
             reviewedAt = reviewedAt,
+            expectedCard = expectedCard,
         )
-    }
 
     suspend fun submitRecognitionReview(
         itemId: String,
         passed: Boolean,
         responseMs: Long,
         reviewedAt: Instant = Instant.now(),
-    ) {
-        submitRecallReview(
+        expectedCard: StudyCardEntity? = null,
+    ): Boolean = submitRecallReview(
             itemId = itemId,
             cardType = CardType.RECOGNITION,
             passed = passed,
             responseMs = responseMs,
             reviewedAt = reviewedAt,
+            expectedCard = expectedCard,
         )
-    }
 
     suspend fun submitRecallReview(
         itemId: String,
@@ -178,16 +224,16 @@ class StudyRepository(
         passed: Boolean,
         responseMs: Long,
         reviewedAt: Instant = Instant.now(),
-    ) {
-        reviewCard(
+        expectedCard: StudyCardEntity? = null,
+    ): Boolean = reviewCard(
             itemId = itemId,
             cardType = cardType,
             passed = passed,
             recognizedText = null,
             responseMs = responseMs,
             reviewedAt = reviewedAt,
+            expectedCard = expectedCard,
         )
-    }
 
     fun lesson(lessonId: String): LessonSeed = lessonsById.getValue(lessonId)
 
@@ -197,19 +243,20 @@ class StudyRepository(
     fun guideFor(itemId: String): GuideSeed? = seeds.guides[itemId]
 
     private suspend fun ensureCardsForLesson(lesson: LessonSeed) {
-        val newCards = mutableListOf<StudyCardEntity>()
-        lesson.itemIds.forEach { itemId ->
-            val item = itemsById.getValue(itemId)
-            if (dao.getCard(itemId, CardType.RECOGNITION.name) == null) {
-                newCards += defaultCard(item, CardType.RECOGNITION)
-            }
-            if (dao.getCard(itemId, CardType.WRITING.name) == null) {
-                newCards += defaultCard(item, CardType.WRITING)
-            }
-            if (item.audioText.isNotBlank() && dao.getCard(itemId, CardType.AUDIO_RECOGNITION.name) == null) {
-                newCards += defaultCard(item, CardType.AUDIO_RECOGNITION)
+        val nowMillis = Instant.now().toEpochMilli()
+        val existingCards = buildMap<Pair<String, CardType>, StudyCardEntity> {
+            lesson.itemIds.forEach { itemId ->
+                dao.getCard(itemId, CardType.WRITING.name)?.let { put(itemId to CardType.WRITING, it) }
+                dao.getCard(itemId, CardType.RECOGNITION.name)?.let { put(itemId to CardType.RECOGNITION, it) }
+                dao.getCard(itemId, CardType.AUDIO_RECOGNITION.name)?.let { put(itemId to CardType.AUDIO_RECOGNITION, it) }
             }
         }
+        val newCards = createLessonStartCards(
+            lesson = lesson,
+            itemsById = itemsById,
+            existingCards = existingCards,
+            nowMillis = nowMillis,
+        )
         if (newCards.isNotEmpty()) {
             dao.upsertCards(newCards)
         }
@@ -222,9 +269,14 @@ class StudyRepository(
         recognizedText: String?,
         responseMs: Long,
         reviewedAt: Instant,
-    ) {
+        expectedCard: StudyCardEntity? = null,
+    ): Boolean = database.withTransaction {
         val item = itemsById.getValue(itemId)
-        val existingCard = dao.getCard(itemId, cardType.name) ?: defaultCard(item, cardType)
+        val nowMillis = reviewedAt.toEpochMilli()
+        val existingCard = dao.getCard(itemId, cardType.name) ?: return@withTransaction false
+        if (!acceptsSubmission(existingCard, expectedCard, nowMillis)) {
+            return@withTransaction false
+        }
         val scheduled = scheduler.review(existingCard, reviewedAt, passed)
         dao.upsertCard(scheduled.updatedCard)
         dao.insertReviewLog(
@@ -242,7 +294,37 @@ class StudyRepository(
                 state = scheduled.updatedCard.state,
             ),
         )
+        if (passed) {
+            when (cardType) {
+                CardType.WRITING -> {
+                    val unlockedCard = activateDependentCard(
+                        item = item,
+                        reviewedCardType = cardType,
+                        existingCard = dao.getCard(itemId, CardType.RECOGNITION.name),
+                        nowMillis = nowMillis,
+                    )
+                    if (unlockedCard != null) {
+                        dao.upsertCard(unlockedCard)
+                    }
+                }
+
+                CardType.RECOGNITION -> {
+                    val unlockedCard = activateDependentCard(
+                        item = item,
+                        reviewedCardType = cardType,
+                        existingCard = dao.getCard(itemId, CardType.AUDIO_RECOGNITION.name),
+                        nowMillis = nowMillis,
+                    )
+                    if (unlockedCard != null) {
+                        dao.upsertCard(unlockedCard)
+                    }
+                }
+
+                CardType.AUDIO_RECOGNITION -> Unit
+            }
+        }
         updateStreak(reviewedAt)
+        true
     }
 
     private suspend fun updateStreak(reviewedAt: Instant) {
@@ -270,6 +352,7 @@ class StudyRepository(
         streak: DailyStreakEntity,
         modelState: ModelDownloadStateEntity?,
         settingsState: SettingsState,
+        nowMillis: Long,
     ): LibrarySnapshot =
         buildLibrarySnapshot(
             seeds = seeds,
@@ -278,29 +361,105 @@ class StudyRepository(
             streak = streak,
             modelState = modelState,
             settingsState = settingsState,
-            nowMillis = Instant.now().toEpochMilli(),
+            nowMillis = nowMillis,
         )
+}
 
-    private fun defaultCard(item: StudyItemSeed, cardType: CardType): StudyCardEntity {
-        val now = Instant.now().toEpochMilli()
-        return StudyCardEntity(
-            itemId = item.id,
-            cardType = cardType.name,
-            state = CardState.NEW.name,
-            dueAt = now,
-            stability = 0.0,
-            difficulty = 0.0,
-            lastReviewedAt = null,
-            scheduledDays = 0,
-            learningStep = 0,
-            reps = 0,
-            lapses = 0,
-            lastOutcomePass = null,
-            seedOrder = item.sortOrder * 10 + when (cardType) {
-                CardType.RECOGNITION -> 1
-                CardType.WRITING -> 2
-                CardType.AUDIO_RECOGNITION -> 3
-            },
+internal const val IMMEDIATE_LESSON_QUEUE_LIMIT = 4
+internal const val SNAPSHOT_FALLBACK_REFRESH_MILLIS = 60_000L
+
+private fun snapshotClock(cards: List<StudyCardEntity>): Flow<Long> = flow {
+    while (true) {
+        val nowMillis = Instant.now().toEpochMilli()
+        emit(nowMillis)
+        delay(
+            nextSnapshotRefreshDelayMillis(
+                dueAtMillis = cards.map { it.dueAt },
+                nowMillis = nowMillis,
+            ),
         )
     }
 }
+
+internal fun nextSnapshotRefreshDelayMillis(
+    dueAtMillis: List<Long>,
+    nowMillis: Long,
+    fallbackMillis: Long = SNAPSHOT_FALLBACK_REFRESH_MILLIS,
+): Long {
+    val nextFutureDueAt = dueAtMillis.filter { it > nowMillis }.minOrNull()
+    return (nextFutureDueAt?.minus(nowMillis) ?: fallbackMillis)
+        .coerceIn(1L, fallbackMillis)
+}
+
+internal fun createLessonStartCards(
+    lesson: LessonSeed,
+    itemsById: Map<String, StudyItemSeed>,
+    existingCards: Map<Pair<String, CardType>, StudyCardEntity>,
+    nowMillis: Long,
+): List<StudyCardEntity> = lesson.itemIds.mapIndexedNotNull { index, itemId ->
+    if (existingCards[itemId to CardType.WRITING] != null) {
+        null
+    } else {
+        seedCard(
+            item = itemsById.getValue(itemId),
+            cardType = CardType.WRITING,
+            dueAt = lessonStartDueAt(index, nowMillis),
+        )
+    }
+}
+
+internal fun activateDependentCard(
+    item: StudyItemSeed,
+    reviewedCardType: CardType,
+    existingCard: StudyCardEntity?,
+    nowMillis: Long,
+): StudyCardEntity? {
+    val nextCardType = when (reviewedCardType) {
+        CardType.WRITING -> CardType.RECOGNITION
+        CardType.RECOGNITION -> if (item.audioText.isBlank()) null else CardType.AUDIO_RECOGNITION
+        CardType.AUDIO_RECOGNITION -> null
+    } ?: return null
+
+    return when {
+        existingCard == null -> seedCard(item, nextCardType, nowMillis)
+        existingCard.lastReviewedAt == null && existingCard.dueAt > nowMillis -> existingCard.copy(dueAt = nowMillis)
+        else -> null
+    }
+}
+
+internal fun acceptsSubmission(
+    currentCard: StudyCardEntity,
+    expectedCard: StudyCardEntity?,
+    nowMillis: Long,
+): Boolean = expectedCard != null && currentCard == expectedCard && currentCard.dueAt <= nowMillis
+
+internal fun seedCard(
+    item: StudyItemSeed,
+    cardType: CardType,
+    dueAt: Long,
+): StudyCardEntity = StudyCardEntity(
+    itemId = item.id,
+    cardType = cardType.name,
+    state = CardState.NEW.name,
+    dueAt = dueAt,
+    stability = 0.0,
+    difficulty = 0.0,
+    lastReviewedAt = null,
+    scheduledDays = 0,
+    learningStep = 0,
+    reps = 0,
+    lapses = 0,
+    lastOutcomePass = null,
+    seedOrder = item.sortOrder * 10 + when (cardType) {
+        CardType.RECOGNITION -> 1
+        CardType.WRITING -> 2
+        CardType.AUDIO_RECOGNITION -> 3
+    },
+)
+
+private fun lessonStartDueAt(index: Int, nowMillis: Long): Long =
+    if (index < IMMEDIATE_LESSON_QUEUE_LIMIT) {
+        nowMillis
+    } else {
+        nowMillis + ((index - IMMEDIATE_LESSON_QUEUE_LIMIT + 1) * 60_000L)
+    }

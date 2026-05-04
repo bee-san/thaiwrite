@@ -59,6 +59,10 @@ class HandwritingRecognitionServiceTest {
             english = "short i vowel",
             audioText = "สระ อิ",
             prompt = "Write sara i.",
+            category = null,
+            teachingNote = null,
+            teachingMode = null,
+            components = emptyList(),
         )
         val toneItem = StudyItemSeed(
             id = "mai_ek",
@@ -70,12 +74,18 @@ class HandwritingRecognitionServiceTest {
             english = "first tone mark",
             audioText = "ไม้ เอก",
             prompt = "Write mai ek.",
+            category = null,
+            teachingNote = null,
+            teachingMode = null,
+            components = emptyList(),
         )
 
         assertEquals("อิ", vowelItem.writingTarget().displayText)
         assertEquals(listOf("อิ", "ิ"), vowelItem.writingTarget().acceptedTexts)
         assertEquals("อ่", toneItem.writingTarget().displayText)
         assertEquals(listOf("อ่", "่"), toneItem.writingTarget().acceptedTexts)
+        assertTrue(vowelItem.writingTarget().supportText!!.contains("above the consonant"))
+        assertTrue(toneItem.writingTarget().supportText!!.contains("above the consonant stack"))
     }
 
     @Test
@@ -90,6 +100,10 @@ class HandwritingRecognitionServiceTest {
             english = "chicken consonant",
             audioText = "ก ไก่",
             prompt = "Write ko kai.",
+            category = null,
+            teachingNote = null,
+            teachingMode = null,
+            components = emptyList(),
         )
         val wordItem = StudyItemSeed(
             id = "mae",
@@ -101,6 +115,10 @@ class HandwritingRecognitionServiceTest {
             english = "mother",
             audioText = "แม่",
             prompt = "Write mother in Thai.",
+            category = null,
+            teachingNote = null,
+            teachingMode = null,
+            components = emptyList(),
         )
 
         assertEquals("ก", consonantItem.writingTarget().displayText)

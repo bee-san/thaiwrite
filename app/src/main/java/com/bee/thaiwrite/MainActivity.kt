@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
     private val repository by lazy {
         StudyRepository(
             context = applicationContext,
+            database = database,
             dao = database.studyDao(),
             settings = settings,
             scheduler = FsrsPassFailScheduler(),

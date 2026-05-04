@@ -137,7 +137,7 @@ internal fun DashboardHomeScreen(
     ) { padding ->
         val totalTargets = snapshot.totalWritingCount.coerceAtLeast(1)
         val goalProgress = snapshot.masteredWritingCount.toFloat() / totalTargets.toFloat()
-        val todayWords = snapshot.focusWords.take(3)
+        val todayWords = snapshot.usefulWords.take(3)
 
         LazyColumn(
             modifier = Modifier
@@ -231,15 +231,15 @@ internal fun DashboardHomeScreen(
                 }
             }
             item {
-                SectionRow(title = "Today's words", action = "Open deck", onAction = onOpenLibrary)
+                SectionRow(title = "Today's useful words", action = "Open deck", onAction = onOpenLibrary)
             }
             items(todayWords) { item ->
                 FocusWordRow(
                     thai = item.thai,
                     transliteration = item.transliteration,
                     meaning = item.english,
-                    tag = wordTag(item.id),
-                    chipColor = wordTagColor(item.id),
+                    tag = wordCategory(item.category),
+                    chipColor = wordCategoryColor(item.category),
                     onPlayAudio = { onPlayAudio(item.audioText) },
                     onOpen = onOpenLibrary,
                 )
@@ -252,8 +252,8 @@ internal fun DashboardHomeScreen(
                     QuickActionTile(
                         modifier = Modifier.weight(1f),
                         icon = Icons.AutoMirrored.Outlined.LibraryBooks,
-                        title = "Loved words",
-                        body = "Study the tiny names and words deck.",
+                        title = "Useful words",
+                        body = "Browse the small survival-basic word deck.",
                         accent = Color(0xFFFFF4E9),
                         iconTint = Saffron,
                         onClick = onOpenLibrary,
@@ -277,7 +277,7 @@ internal fun DashboardHomeScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             if (snapshot.dueCards.isEmpty()) {
-                                "Queue clear. You can either advance the next lesson or replay the loved words deck."
+                                "Queue clear. You can either advance the next lesson or replay the useful words deck."
                             } else {
                                 "${snapshot.dueCards.size} cards are waiting right now: ${snapshot.dueRecognitionCount} recall, ${snapshot.dueWritingCount} writing, ${snapshot.dueAudioCount} audio."
                             },
@@ -358,7 +358,7 @@ internal fun PracticeHubScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("What Study will do", style = ThaiSectionTitleStyle(), color = Ink)
                         Text(
-                            "You do not need to pick card types. Study automatically moves through recall, writing, and audio in the right order.",
+                            "You do not need to pick card types. Study unlocks writing first, then recall after the first good writing pass, then audio after the first good recall pass.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = Slate,
                         )
@@ -395,9 +395,9 @@ internal fun PracticeHubScreen(
                 GradientBanner(
                     title = "Baby-step lessons stay in order",
                     body = if (nextLesson != null) {
-                        "Next up: ${nextLesson.lesson.title}. Keep the course tight and focused."
+                        "Next up: ${nextLesson.lesson.title}. If it stays locked, clear the short follow-up writing reviews first."
                     } else {
-                        "All unlocked lessons are already in motion. Replay any lesson whenever you want cleaner handwriting."
+                        "All unlocked lessons are already in motion. Replay any lesson or browse the useful words deck whenever you want cleaner handwriting."
                     },
                     buttonText = if (nextLesson != null) "Open next lesson" else "Browse words",
                     onClick = {
@@ -431,14 +431,14 @@ internal fun WordsDeckScreen(
     val snapshot = uiState.snapshot ?: return
     var query by rememberSaveable { mutableStateOf("") }
     var selectedTag by rememberSaveable { mutableStateOf("All") }
-    val tags = listOf("All", "Family", "Names", "Home", "Heart", "Pets")
-    val wordsLessonId = snapshot.lessons.firstOrNull { it.lesson.stage == "Words" }?.lesson?.id
-    val filteredWords = snapshot.focusWords.filter { item ->
+    val tags = listOf("All") + snapshot.usefulWords.mapNotNull { it.category }.distinct()
+    val wordsLessonId = snapshot.lessons.firstOrNull { it.lesson.stage == "Useful words" }?.lesson?.id
+    val filteredWords = snapshot.usefulWords.filter { item ->
         val matchesQuery = query.isBlank() ||
             item.thai.contains(query, ignoreCase = true) ||
             item.transliteration.contains(query, ignoreCase = true) ||
             item.english.contains(query, ignoreCase = true)
-        val itemTag = wordTag(item.id)
+        val itemTag = wordCategory(item.category)
         val matchesTag = selectedTag == "All" || selectedTag == itemTag
         matchesQuery && matchesTag
     }
@@ -457,7 +457,7 @@ internal fun WordsDeckScreen(
         ) {
             item {
                 AppHeader(
-                    title = "Loved Words",
+                    title = "Useful Words",
                     streak = snapshot.streak,
                     onBellClick = { onNavigate(MainDestination.Profile) },
                 )
@@ -474,7 +474,7 @@ internal fun WordsDeckScreen(
                         leadingIcon = {
                             Icon(Icons.Outlined.Search, contentDescription = null, tint = Slate)
                         },
-                        placeholder = { Text("Search names and words") },
+                        placeholder = { Text("Search useful words") },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(20.dp),
@@ -503,8 +503,8 @@ internal fun WordsDeckScreen(
             }
             item {
                 GradientBanner(
-                    title = "Small deck, high emotional value",
-                    body = "This starter list is hard-coded on purpose so you can memorize the names and words that matter first.",
+                    title = "Small deck, high survival value",
+                    body = "These words are grouped from the seed data so the early deck stays focused on family, movement, home, politeness, and other beginner basics.",
                     buttonText = if (wordsLessonId != null) "Practice this deck" else "Open practice",
                     onClick = {
                         if (wordsLessonId != null) {
@@ -523,8 +523,8 @@ internal fun WordsDeckScreen(
                                 thai = item.thai,
                                 transliteration = item.transliteration,
                                 meaning = item.english,
-                                tag = wordTag(item.id),
-                                chipColor = wordTagColor(item.id),
+                                tag = wordCategory(item.category),
+                                chipColor = wordCategoryColor(item.category),
                                 onPlayAudio = { onPlayAudio(item.audioText) },
                                 onOpen = {
                                     if (wordsLessonId != null) {
@@ -630,7 +630,7 @@ internal fun ProfileScreen(
                 ) {
                     MilestoneChip("Streak ${snapshot.streak}d", Coral)
                     MilestoneChip("${snapshot.masteredWritingCount} writing targets", SeaGlass)
-                    MilestoneChip("${snapshot.focusWords.size} loved words", Lavender)
+                    MilestoneChip("${snapshot.usefulWords.size} useful words", Lavender)
                     MilestoneChip("${snapshot.completedLessonCount} lessons complete", Ink)
                 }
             }
@@ -776,21 +776,21 @@ private fun buildStudyCallToAction(snapshot: LibrarySnapshot): StudyCallToAction
             buttonLabel = "Study now",
         )
         nextLesson != null && nextLesson.started -> StudyCallToAction(
-            title = "Continue the next alphabet batch",
-            body = "Pick up ${nextLesson.lesson.title} and keep drilling the same letters until they stick.",
-            detail = "You will write first, then spaced repetition will bring the letters back later.",
+            title = "Continue the next beginner batch",
+            body = "Pick up ${nextLesson.lesson.title} and keep drilling the same small set until the writing feels stable.",
+            detail = "You will write first, then recall and audio unlock in stages.",
             buttonLabel = "Study now",
         )
         nextLesson != null -> StudyCallToAction(
-            title = "Learn a tiny new set of letters",
+            title = "Learn a tiny new set of symbols",
             body = "Open ${nextLesson.lesson.title} and start the next baby-step lesson.",
-            detail = "The course stays locked in order so you only handle a small amount at once.",
+            detail = "The course stays locked in order so you only handle a small amount at once, and the next lesson may wait for a short review later.",
             buttonLabel = "Study now",
         )
         else -> StudyCallToAction(
-            title = "Replay the loved words deck",
+            title = "Replay the useful words deck",
             body = "All current alphabet lessons are already in motion.",
-            detail = "Use Study to keep your recall fresh, then visit Words for names and family words.",
+            detail = "Use Study to keep your recall fresh, then visit Words for the survival-basic deck.",
             buttonLabel = "Study now",
         )
     }
@@ -1269,10 +1269,10 @@ private fun StyledLessonRow(
     onOpenLesson: () -> Unit,
 ) {
     val accent = when (lesson.lesson.stage) {
-        "Consonants" -> SeaGlass
-        "Vowels" -> Saffron
-        "Tone marks" -> Lavender
-        "Words" -> CoralDeep
+        "Starter symbols", "Core alphabet" -> SeaGlass
+        "More vowels" -> Saffron
+        "Useful words" -> CoralDeep
+        "Alphabet completion" -> Lavender
         else -> Palm
     }
     SoftPanel(
@@ -1284,7 +1284,7 @@ private fun StyledLessonRow(
         Text(lesson.lesson.description, style = MaterialTheme.typography.bodyMedium, color = Slate)
         Text(
             if (lesson.unlocked) {
-                "${lesson.masteredCount}/${lesson.totalCount} writing targets stable"
+                "${lesson.requiredMasteredCount}/${lesson.requiredTotalCount} required writing targets stable"
             } else {
                 "Locked until the previous lesson is mastered"
             },
@@ -1537,20 +1537,14 @@ private fun notificationPermissionGranted(context: Context): Boolean {
     ) == PackageManager.PERMISSION_GRANTED
 }
 
-private fun wordTag(itemId: String): String = when (itemId) {
-    "mae", "pho", "yai" -> "Family"
-    "beam", "ann" -> "Names"
-    "ban", "nam", "na" -> "Home"
-    "chai" -> "Heart"
-    "maeo" -> "Pets"
-    else -> "Words"
-}
+private fun wordCategory(category: String?): String = category ?: "Useful"
 
-private fun wordTagColor(itemId: String): Color = when (wordTag(itemId)) {
+private fun wordCategoryColor(category: String?): Color = when (wordCategory(category)) {
     "Family" -> SeaGlass
-    "Names" -> Saffron
+    "Movement" -> Saffron
     "Home" -> Color(0xFF3D9E92)
-    "Heart" -> Lavender
-    "Pets" -> CoralDeep
+    "Essentials" -> Lavender
+    "Politeness" -> CoralDeep
+    "Questions" -> Palm
     else -> Palm
 }
