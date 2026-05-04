@@ -96,6 +96,30 @@ class CurriculumSeedIntegrityTest {
         }
     }
 
+    @Test
+    fun `atomic trace guides include normalized stroke order data`() {
+        val guidesById = guides.associateBy { it.itemId }
+
+        items.forEach { item ->
+            val guide = guidesById.getValue(item.id)
+            if (item.type == "WORD") {
+                assertEquals("Words should use the outline fallback: ${item.id}", null, guide.strokeGuide)
+            } else {
+                val strokeGuide = requireNotNull(guide.strokeGuide) { "Missing stroke guide for ${item.id}" }
+                assertEquals("Unexpected guide target for ${item.id}", expectedGuideTarget(item), strokeGuide.targetText)
+                assertTrue("Missing strokes for ${item.id}", strokeGuide.strokes.isNotEmpty())
+                strokeGuide.strokes.forEach { stroke ->
+                    assertTrue("Missing stroke label for ${item.id}", stroke.label.isNotBlank())
+                    assertTrue("Stroke needs at least two points for ${item.id}", stroke.points.size >= 2)
+                    stroke.points.forEach { point ->
+                        assertTrue("x out of range for ${item.id}: ${point.x}", point.x in 0.0..1.0)
+                        assertTrue("y out of range for ${item.id}: ${point.y}", point.y in 0.0..1.0)
+                    }
+                }
+            }
+        }
+    }
+
     private fun loadLessons(): List<TestLesson> {
         val text = assetFile("curriculum.json").readText()
         val pattern = Regex(
@@ -121,6 +145,7 @@ class CurriculumSeedIntegrityTest {
                     id = capture(line, "\"id\":\\s*\"([^\"]+)\""),
                     lessonId = capture(line, "\"lessonId\":\\s*\"([^\"]+)\""),
                     type = capture(line, "\"type\":\\s*\"([^\"]+)\""),
+                    thai = capture(line, "\"thai\":\\s*\"([^\"]+)\""),
                     category = captureOrNull(line, "\"category\":\\s*\"([^\"]+)\""),
                     teachingMode = captureOrNull(line, "\"teachingMode\":\\s*\"([^\"]+)\""),
                     components = Regex("\"itemId\":\\s*\"([^\"]+)\"").findAll(line).map { it.groupValues[1] }.toList(),
@@ -131,14 +156,61 @@ class CurriculumSeedIntegrityTest {
         assetFile("trace_guides.json")
             .readLines()
             .map { it.trim() }
-            .filter { it.startsWith("{ \"itemId\":") }
+            .filter { it.startsWith("{\"itemId\":") || it.startsWith("{ \"itemId\":") }
             .map { line ->
                 TestGuide(
                     itemId = capture(line, "\"itemId\":\\s*\"([^\"]+)\""),
                     guideType = capture(line, "\"guideType\":\\s*\"([^\"]+)\""),
                     tip = capture(line, "\"tip\":\\s*\"([^\"]+)\""),
+                    strokeGuide = parseStrokeGuide(line),
                 )
             }
+
+    private fun parseStrokeGuide(line: String): TestStrokeGuide? {
+        if (!line.contains("\"strokeGuide\"")) {
+            return null
+        }
+        val targetText = capture(line, "\"targetText\":\\s*\"([^\"]+)\"")
+        val strokes = Regex("\\{\\\"label\\\":\\s*\\\"([^\\\"]+)\\\",\\s*\\\"points\\\":\\s*\\[(.*?)\\]\\}")
+            .findAll(line)
+            .map { strokeMatch ->
+                TestStroke(
+                    label = strokeMatch.groupValues[1],
+                    points = Regex("\\{\\\"x\\\":\\s*([0-9.]+),\\s*\\\"y\\\":\\s*([0-9.]+)\\}")
+                        .findAll(strokeMatch.groupValues[2])
+                        .map { pointMatch ->
+                            TestPoint(
+                                x = pointMatch.groupValues[1].toDouble(),
+                                y = pointMatch.groupValues[2].toDouble(),
+                            )
+                        }
+                        .toList(),
+                )
+            }
+            .toList()
+        return TestStrokeGuide(targetText = targetText, strokes = strokes)
+    }
+
+    private fun expectedGuideTarget(item: TestItem): String = when (item.thai) {
+        "า" -> "อา"
+        "ะ" -> "อะ"
+        "ำ" -> "อำ"
+        "ิ" -> "อิ"
+        "ี" -> "อี"
+        "ุ" -> "อุ"
+        "ู" -> "อู"
+        "ั" -> "อั"
+        "เ" -> "เอ"
+        "แ" -> "แอ"
+        "โ" -> "โอ"
+        "ไ" -> "ไอ"
+        "ใ" -> "ใอ"
+        "่" -> "อ่"
+        "้" -> "อ้"
+        "๊" -> "อ๊"
+        "๋" -> "อ๋"
+        else -> item.thai
+    }
 
     private fun capture(line: String, pattern: String): String =
         requireNotNull(Regex(pattern).find(line)) { "Missing pattern $pattern in $line" }.groupValues[1]
@@ -165,6 +237,7 @@ class CurriculumSeedIntegrityTest {
         val id: String,
         val lessonId: String,
         val type: String,
+        val thai: String,
         val category: String?,
         val teachingMode: String?,
         val components: List<String>,
@@ -174,5 +247,21 @@ class CurriculumSeedIntegrityTest {
         val itemId: String,
         val guideType: String,
         val tip: String,
+        val strokeGuide: TestStrokeGuide?,
+    )
+
+    private data class TestStrokeGuide(
+        val targetText: String,
+        val strokes: List<TestStroke>,
+    )
+
+    private data class TestStroke(
+        val label: String,
+        val points: List<TestPoint>,
+    )
+
+    private data class TestPoint(
+        val x: Double,
+        val y: Double,
     )
 }

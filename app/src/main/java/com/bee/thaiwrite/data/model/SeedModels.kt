@@ -80,10 +80,26 @@ data class LessonSeed(
     val itemIds: List<String>,
 )
 
+data class StrokeGuidePointSeed(
+    val x: Float,
+    val y: Float,
+)
+
+data class StrokeGuideStrokeSeed(
+    val label: String,
+    val points: List<StrokeGuidePointSeed>,
+)
+
+data class StrokeGuideSeed(
+    val targetText: String,
+    val strokes: List<StrokeGuideStrokeSeed>,
+)
+
 data class GuideSeed(
     val itemId: String,
     val guideType: String,
     val tip: String,
+    val strokeGuide: StrokeGuideSeed? = null,
 )
 
 data class SeedBundle(
@@ -146,6 +162,7 @@ object SeedLoader {
                 itemId = json.getString("itemId"),
                 guideType = json.getString("guideType"),
                 tip = json.getString("tip"),
+                strokeGuide = json.optJSONObject("strokeGuide")?.let(::parseStrokeGuide),
             )
         }.associateBy { it.itemId }
 
@@ -156,6 +173,22 @@ object SeedLoader {
         )
     }
 }
+
+private fun parseStrokeGuide(json: JSONObject): StrokeGuideSeed =
+    StrokeGuideSeed(
+        targetText = json.getString("targetText"),
+        strokes = json.getJSONArray("strokes").mapObjects { stroke ->
+            StrokeGuideStrokeSeed(
+                label = stroke.getString("label"),
+                points = stroke.getJSONArray("points").mapObjects { point ->
+                    StrokeGuidePointSeed(
+                        x = point.getDouble("x").toFloat(),
+                        y = point.getDouble("y").toFloat(),
+                    )
+                },
+            )
+        },
+    )
 
 private inline fun <T> JSONArray.mapObjects(block: (JSONObject) -> T): List<T> =
     buildList(length()) {
