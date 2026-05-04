@@ -45,6 +45,7 @@ import com.bee.thaiwrite.domain.practice.StrokePoint
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 @Stable
@@ -135,9 +136,12 @@ fun WritingCanvas(
     showGuide: Boolean = true,
     guideMode: WritingGuideMode = if (showGuide) WritingGuideMode.Trace else WritingGuideMode.Hidden,
     strokeGuide: WritingStrokeGuide? = null,
+    visibleGuideStrokeCount: Int? = null,
+    guideOpacityMultiplier: Float = 1f,
 ) {
     val strokes = state.strokes()
-    val structuredStrokeCount = strokeGuide?.strokes.orEmpty().count { it.points.isNotEmpty() }
+    val structuredStrokeCount = strokeGuide.drawableStrokeCount(visibleGuideStrokeCount)
+    val boundedGuideOpacityMultiplier = guideOpacityMultiplier.coerceIn(0f, 1f)
     val traceAnimation by rememberInfiniteTransition(label = "writing-guide-trace").animateFloat(
         initialValue = 0f,
         targetValue = max(1, structuredStrokeCount).toFloat(),
@@ -213,8 +217,13 @@ fun WritingCanvas(
                 WritingGuideMode.Trace,
                 WritingGuideMode.Fade -> {
                     if (strokeGuide.hasDrawableStrokes()) {
-                        val guideStrokes = strokeGuide.scaledStrokes(width, height)
-                        val guideAlpha = if (guideMode == WritingGuideMode.Trace) 0.26f else 0.16f
+                        val guideStrokes = strokeGuide.scaledStrokes(
+                            canvasWidth = width,
+                            canvasHeight = height,
+                            visibleStrokeCount = visibleGuideStrokeCount,
+                        )
+                        val guideAlpha = (if (guideMode == WritingGuideMode.Trace) 0.26f else 0.16f) *
+                            boundedGuideOpacityMultiplier
                         guideStrokes.forEach { guideStroke ->
                             if (guideStroke.size >= 2) {
                                 drawPath(
@@ -265,7 +274,8 @@ fun WritingCanvas(
                             guideText = guideText,
                             width = width,
                             height = height,
-                            alpha = if (guideMode == WritingGuideMode.Trace) 90 else 54,
+                            alpha = ((if (guideMode == WritingGuideMode.Trace) 90 else 54) *
+                                boundedGuideOpacityMultiplier).roundToInt(),
                         )
                     }
                 }
@@ -295,12 +305,25 @@ fun WritingCanvas(
 private fun WritingStrokeGuide?.hasDrawableStrokes(): Boolean =
     this?.strokes?.any { it.points.isNotEmpty() } == true
 
-private fun WritingStrokeGuide?.scaledStrokes(canvasWidth: Float, canvasHeight: Float): List<List<Offset>> {
+private fun WritingStrokeGuide?.drawableStrokeCount(visibleStrokeCount: Int?): Int {
+    val strokeCount = this?.strokes.orEmpty().count { it.points.isNotEmpty() }
+    val visibleCount = visibleStrokeCount ?: return strokeCount
+    return strokeCount.coerceAtMost(visibleCount.coerceAtLeast(0))
+}
+
+private fun WritingStrokeGuide?.scaledStrokes(
+    canvasWidth: Float,
+    canvasHeight: Float,
+    visibleStrokeCount: Int?,
+): List<List<Offset>> {
     val guide = this ?: return emptyList()
     val guideWidth = guide.width.takeIf { it > 0f } ?: 1f
     val guideHeight = guide.height.takeIf { it > 0f } ?: 1f
     return guide.strokes
         .filter { it.points.isNotEmpty() }
+        .let { strokes ->
+            visibleStrokeCount?.let { strokes.take(it.coerceAtLeast(0)) } ?: strokes
+        }
         .map { stroke ->
             stroke.points.map { point ->
                 Offset(
