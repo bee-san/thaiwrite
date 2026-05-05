@@ -103,7 +103,7 @@ internal enum class MainDestination(
     Home("home", "Home", Icons.Outlined.Home),
     Practice("practice-hub", "Study", Icons.Outlined.PlayArrow),
     Words("words", "Words", Icons.AutoMirrored.Outlined.LibraryBooks),
-    Profile("profile", "Profile", Icons.Outlined.PersonOutline),
+    Profile("profile", "Progress", Icons.Outlined.PersonOutline),
 }
 
 private data class StudyCallToAction(
@@ -159,7 +159,7 @@ internal fun DashboardHomeScreen(
                     subtitle = if (snapshot.streak > 0) {
                         "Keep it up. You are building recall through writing."
                     } else {
-                        "Start a streak today with one review or one writing check."
+                        "Start today with one small Thai writing check."
                     },
                 )
             }
@@ -183,9 +183,9 @@ internal fun DashboardHomeScreen(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text("Core alphabet goal", style = ThaiSectionOverlineStyle(), color = SeaGlass)
+                            Text("Thai writing goal", style = ThaiSectionOverlineStyle(), color = SeaGlass)
                             Text(
-                                "Bring every letter into long-term writing memory.",
+                                "Learn useful Thai first, then fill in the full alphabet.",
                                 style = ThaiSectionTitleStyle(),
                                 color = Ink,
                             )
@@ -202,7 +202,7 @@ internal fun DashboardHomeScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         MetricBadge(
                             value = "${snapshot.masteredWritingCount} / ${snapshot.totalWritingCount}",
-                            label = "targets",
+                            label = "Thai shapes",
                             containerColor = MintTint,
                             accentColor = SeaGlass,
                         )
@@ -212,10 +212,10 @@ internal fun DashboardHomeScreen(
             if (!uiState.thaiAudioReady) {
                 item {
                     StatusPanel(
-                        title = "Thai audio needs setup",
+                        title = "Thai audio setup",
                         body = uiState.thaiAudioStatus,
                         accent = LavenderTint,
-                        buttonText = "Fix audio",
+                        buttonText = "Set up audio",
                         onClick = onOpenThaiAudioSetup,
                     )
                 }
@@ -231,7 +231,7 @@ internal fun DashboardHomeScreen(
                 }
             }
             item {
-                SectionRow(title = "Today's useful words", action = "Open deck", onAction = onOpenLibrary)
+                SectionRow(title = "Useful Thai words", action = "Open deck", onAction = onOpenLibrary)
             }
             items(todayWords) { item ->
                 FocusWordRow(
@@ -253,7 +253,7 @@ internal fun DashboardHomeScreen(
                         modifier = Modifier.weight(1f),
                         icon = Icons.AutoMirrored.Outlined.LibraryBooks,
                         title = "Useful words",
-                        body = "Browse the small survival-basic word deck.",
+                        body = "Hear and write the small beginner word deck.",
                         accent = Color(0xFFFFF4E9),
                         iconTint = Saffron,
                         onClick = onOpenLibrary,
@@ -262,7 +262,7 @@ internal fun DashboardHomeScreen(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.PersonOutline,
                         title = "Progress",
-                        body = "See streaks, milestones, and setup.",
+                        body = "See what is stable and adjust reminders.",
                         accent = LavenderTint,
                         iconTint = Lavender,
                         onClick = { onNavigate(MainDestination.Profile) },
@@ -270,16 +270,16 @@ internal fun DashboardHomeScreen(
                 }
             }
             item {
-                SectionRow(title = "Recent momentum")
+                SectionRow(title = "What to learn next")
             }
             item {
                 SoftPanel {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             if (snapshot.dueCards.isEmpty()) {
-                                "Queue clear. You can either advance the next lesson or replay the useful words deck."
+                                "Nothing is due. Tap Study to learn the next small set or replay useful words."
                             } else {
-                                "${snapshot.dueCards.size} cards are waiting right now: ${snapshot.dueRecognitionCount} recall, ${snapshot.dueWritingCount} writing, ${snapshot.dueAudioCount} audio."
+                                "${snapshot.dueCards.size} Thai prompts are waiting now: ${snapshot.dueRecognitionCount} memory, ${snapshot.dueWritingCount} writing, ${snapshot.dueAudioCount} listening."
                             },
                             style = MaterialTheme.typography.bodyLarge,
                             color = Ink,
@@ -356,9 +356,9 @@ internal fun PracticeHubScreen(
             item {
                 SoftPanel {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("What Study will do", style = ThaiSectionTitleStyle(), color = Ink)
+                        Text("What happens in Study", style = ThaiSectionTitleStyle(), color = Ink)
                         Text(
-                            "You do not need to pick card types. Study unlocks writing first, then recall after the first good writing pass, then audio after the first good recall pass.",
+                            "You write first. When a shape starts to stick, the same Thai returns as memory and listening practice.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = Slate,
                         )
@@ -369,21 +369,21 @@ internal fun PracticeHubScreen(
                             MiniMetricTile(
                                 modifier = Modifier.weight(1f),
                                 value = snapshot.dueRecognitionCount.toString(),
-                                label = "Recall",
+                                label = "Memory",
                                 accent = MintTint,
                                 tint = SeaGlass,
                             )
                             MiniMetricTile(
                                 modifier = Modifier.weight(1f),
                                 value = snapshot.dueWritingCount.toString(),
-                                label = "Writing",
+                                label = "Write",
                                 accent = Color(0xFFFFF4E9),
                                 tint = Saffron,
                             )
                             MiniMetricTile(
                                 modifier = Modifier.weight(1f),
                                 value = snapshot.dueAudioCount.toString(),
-                                label = "Audio",
+                                label = "Listen",
                                 accent = LavenderTint,
                                 tint = Lavender,
                             )
@@ -393,11 +393,11 @@ internal fun PracticeHubScreen(
             }
             item {
                 GradientBanner(
-                    title = "Baby-step lessons stay in order",
+                    title = "Small lessons stay in order",
                     body = if (nextLesson != null) {
-                        "Next up: ${nextLesson.lesson.title}. If it stays locked, clear the short follow-up writing reviews first."
+                        "Next up: ${nextLesson.lesson.title}. If it stays locked, finish the short writing reviews that are due first."
                     } else {
-                        "All unlocked lessons are already in motion. Replay any lesson or browse the useful words deck whenever you want cleaner handwriting."
+                        "Everything unlocked is already in motion. Replay a lesson or browse useful words when you want cleaner handwriting."
                     },
                     buttonText = if (nextLesson != null) "Open next lesson" else "Browse words",
                     onClick = {
@@ -410,7 +410,7 @@ internal fun PracticeHubScreen(
                 )
             }
             item {
-                SectionRow(title = "Queue preview")
+                SectionRow(title = "Due now")
             }
             items(snapshot.dueCards.take(4)) { card ->
                 DueCardPreview(card = card)
@@ -503,8 +503,8 @@ internal fun WordsDeckScreen(
             }
             item {
                 GradientBanner(
-                    title = "Small deck, high survival value",
-                    body = "These words are grouped from the seed data so the early deck stays focused on family, movement, home, politeness, and other beginner basics.",
+                    title = "Small deck, useful from day one",
+                    body = "The early word deck stays focused on family, movement, home, politeness, and other beginner basics.",
                     buttonText = if (wordsLessonId != null) "Practice this deck" else "Open practice",
                     onClick = {
                         if (wordsLessonId != null) {
@@ -589,7 +589,7 @@ internal fun ProfileScreen(
             item {
                 StreakHeroCard(
                     streak = snapshot.streak,
-                    subtitle = "Best run so far: ${snapshot.maxStreak} days.",
+                    subtitle = "Best run so far: ${dayLabel(snapshot.maxStreak)}.",
                 )
             }
             item {
@@ -629,7 +629,7 @@ internal fun ProfileScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     MilestoneChip("Streak ${snapshot.streak}d", Coral)
-                    MilestoneChip("${snapshot.masteredWritingCount} writing targets", SeaGlass)
+                    MilestoneChip("${snapshot.masteredWritingCount} Thai shapes stable", SeaGlass)
                     MilestoneChip("${snapshot.usefulWords.size} useful words", Lavender)
                     MilestoneChip("${snapshot.completedLessonCount} lessons complete", Ink)
                 }
@@ -660,21 +660,21 @@ internal fun ProfileScreen(
             }
             item {
                 StatusPanel(
-                    title = "Handwriting model",
+                    title = "Handwriting feedback",
                     body = if (uiState.handwritingModelReady) {
-                        "Thai handwriting recognition is installed and ready."
+                        "Automatic Thai handwriting feedback is installed."
                     } else {
-                        "Download the Thai handwriting model so the app can check your writing offline."
+                        "Download automatic feedback if you want the app to check writing for you. Manual checks still work."
                     },
                     accent = MintTint,
-                    buttonText = if (uiState.handwritingModelReady) "Redownload" else "Download model",
+                    buttonText = if (uiState.handwritingModelReady) "Redownload" else "Download feedback",
                     onClick = { onRedownloadModel(false) },
                 )
             }
             item {
                 SoftPanel {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Thai audio", style = ThaiSectionTitleStyle(), color = Ink)
+                        Text("Thai audio voice", style = ThaiSectionTitleStyle(), color = Ink)
                         Text(
                             uiState.thaiAudioStatus,
                             style = MaterialTheme.typography.bodyLarge,
@@ -696,7 +696,7 @@ internal fun ProfileScreen(
                                     onClick = onOpenThaiAudioSetup,
                                     colors = ButtonDefaults.buttonColors(containerColor = Lavender),
                                 ) {
-                                    Text("Fix audio")
+                                    Text("Set up audio")
                                 }
                             }
                             OutlinedButton(onClick = onRefreshSupportState) {
@@ -709,13 +709,15 @@ internal fun ProfileScreen(
             item {
                 NotificationPermissionPanel()
             }
-            item {
-                UpdatePanel(
-                    uiState = uiState,
-                    onCheckUpdates = onCheckUpdates,
-                    onInstallUpdate = onInstallUpdate,
-                    onOpenUpdatePage = onOpenUpdatePage,
-                )
+            if (uiState.updateSupported || uiState.updateInfo != null || uiState.updateChecking || uiState.updateDownloading) {
+                item {
+                    UpdatePanel(
+                        uiState = uiState,
+                        onCheckUpdates = onCheckUpdates,
+                        onInstallUpdate = onInstallUpdate,
+                        onOpenUpdatePage = onOpenUpdatePage,
+                    )
+                }
             }
         }
     }
@@ -770,27 +772,27 @@ private fun buildStudyCallToAction(snapshot: LibrarySnapshot): StudyCallToAction
     val nextLesson = snapshot.lessons.firstOrNull { it.lesson.id == snapshot.nextLessonId }
     return when {
         snapshot.dueCards.isNotEmpty() -> StudyCallToAction(
-            title = "Clear the cards that are already due",
-            body = "${snapshot.dueCards.size} review cards are waiting right now.",
-            detail = "Tap Study and the app will move through recall, writing, and audio for you.",
+            title = "Review the Thai that is due",
+            body = "${snapshot.dueCards.size} Thai prompts are waiting right now.",
+            detail = "Tap Study and the app will move through memory, writing, and listening for you.",
             buttonLabel = "Study now",
         )
         nextLesson != null && nextLesson.started -> StudyCallToAction(
-            title = "Continue the next beginner batch",
-            body = "Pick up ${nextLesson.lesson.title} and keep drilling the same small set until the writing feels stable.",
-            detail = "You will write first, then recall and audio unlock in stages.",
+            title = "Continue the next small batch",
+            body = "Pick up ${nextLesson.lesson.title} and keep writing the same tiny set until it feels familiar.",
+            detail = "You write first, then memory and listening practice appear in stages.",
             buttonLabel = "Study now",
         )
         nextLesson != null -> StudyCallToAction(
             title = "Learn a tiny new set of symbols",
-            body = "Open ${nextLesson.lesson.title} and start the next baby-step lesson.",
-            detail = "The course stays locked in order so you only handle a small amount at once, and the next lesson may wait for a short review later.",
+            body = "Next baby-step lesson: ${nextLesson.lesson.title}.",
+            detail = "The course stays locked in order so you only handle a small amount at once.",
             buttonLabel = "Study now",
         )
         else -> StudyCallToAction(
             title = "Replay the useful words deck",
             body = "All current alphabet lessons are already in motion.",
-            detail = "Use Study to keep your recall fresh, then visit Words for the survival-basic deck.",
+            detail = "Use Study to keep Thai fresh, then visit Words for the beginner deck.",
             buttonLabel = "Study now",
         )
     }
@@ -831,9 +833,9 @@ private fun BigStudyPanel(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                StudyStepPill("1. See")
+                StudyStepPill("1. Copy")
                 StudyStepPill("2. Write")
-                StudyStepPill("3. Review later")
+                StudyStepPill("3. Remember")
             }
             Button(
                 onClick = onClick,
@@ -858,9 +860,9 @@ private fun BigStudyPanel(
 private fun StudyFlowPanel() {
     SoftPanel {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("How to learn the alphabet here", style = ThaiSectionTitleStyle(), color = Ink)
+            Text("How to learn Thai here", style = ThaiSectionTitleStyle(), color = Ink)
             Text(
-                "Do not jump around the menus. Tap Study, copy the new letter or word, check it, and come back later for the short review queue.",
+                "Tap Study first. Copy the new letter or word, try it from memory, then come back later when it returns.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = Slate,
             )
@@ -870,7 +872,7 @@ private fun StudyFlowPanel() {
             ) {
                 StudyStepPill("Small lessons")
                 StudyStepPill("Write by hand")
-                StudyStepPill("Short reviews")
+                StudyStepPill("Memory checks")
             }
         }
     }
@@ -945,7 +947,7 @@ private fun AppHeader(
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.NotificationsNone,
-                        contentDescription = "Profile",
+                        contentDescription = "Progress",
                         tint = Ink,
                     )
                 }
@@ -1003,7 +1005,7 @@ private fun StreakHeroCard(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Text(
-                        text = "$streak day streak",
+                        text = "${dayLabel(streak)} streak",
                         style = MaterialTheme.typography.headlineMedium,
                         color = Color.White,
                     )
@@ -1040,6 +1042,8 @@ private fun StreakHeroCard(
         }
     }
 }
+
+private fun dayLabel(count: Int): String = if (count == 1) "1 day" else "$count days"
 
 @Composable
 private fun SoftPanel(
@@ -1241,9 +1245,9 @@ private fun DueCardPreview(card: ReviewCardView) {
             ) {
                 TagPill(
                     label = when (card.promptMode) {
-                        ReviewPromptMode.RECOGNITION -> "Recall"
+                        ReviewPromptMode.RECOGNITION -> "Memory"
                         ReviewPromptMode.WRITING -> "Write"
-                        ReviewPromptMode.AUDIO -> "Audio"
+                        ReviewPromptMode.AUDIO -> "Listen"
                     },
                     tint = accent,
                 )
@@ -1284,9 +1288,9 @@ private fun StyledLessonRow(
         Text(lesson.lesson.description, style = MaterialTheme.typography.bodyMedium, color = Slate)
         Text(
             if (lesson.unlocked) {
-                "${lesson.requiredMasteredCount}/${lesson.requiredTotalCount} required writing targets stable"
+                "${lesson.requiredMasteredCount}/${lesson.requiredTotalCount} required Thai shapes stable"
             } else {
-                "Locked until the previous lesson is mastered"
+                "Locked until the previous lesson feels stable"
             },
             style = MaterialTheme.typography.bodyMedium,
             color = if (lesson.unlocked) Ink else Slate,
@@ -1376,12 +1380,12 @@ private fun NotificationPermissionPanel() {
 
     SoftPanel {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Notifications", style = ThaiSectionTitleStyle(), color = Ink)
+            Text("Daily nudge", style = ThaiSectionTitleStyle(), color = Ink)
             Text(
                 if (granted) {
-                    "Daily reminder notifications are enabled."
+                    "Daily practice reminders are enabled."
                 } else {
-                    "Android still needs notification permission before reminders can appear."
+                    "Android needs notification permission before practice reminders can appear."
                 },
                 style = MaterialTheme.typography.bodyLarge,
                 color = Slate,

@@ -264,7 +264,7 @@ class LibrarySnapshotBuilderTest {
         assertEquals("Write mother in Thai.", writing.primaryPrompt)
         assertEquals("mae", writing.secondaryPrompt)
         assertTrue(writing.requiresWriting)
-        assertEquals("Listen to the Thai audio, then recall the script.", audio.primaryPrompt)
+        assertEquals("Listen, then picture the Thai spelling.", audio.primaryPrompt)
         assertEquals("mother", audio.secondaryPrompt)
         assertEquals(1, writing.breakdown.size)
         assertFalse(writing.breakdown.first().comingSoon)
