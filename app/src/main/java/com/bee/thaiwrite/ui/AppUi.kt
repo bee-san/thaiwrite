@@ -89,6 +89,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.bee.thaiwrite.BuildConfig
 import com.bee.thaiwrite.data.db.CardState
+import com.bee.thaiwrite.data.model.StudyItemSeed
 import com.bee.thaiwrite.data.model.TeachingMode
 import com.bee.thaiwrite.data.repo.ItemBreakdownView
 import com.bee.thaiwrite.data.repo.LessonOverview
@@ -126,11 +127,11 @@ private fun initialWritingGuidanceStage(cardState: String?): WritingGuidanceStag
 private fun WritingGuidanceStage.showsGuide(): Boolean = this != WritingGuidanceStage.CHECK
 
 private fun WritingGuidanceStage.label(): String = when (this) {
-    WritingGuidanceStage.TRACE -> "Trace"
-    WritingGuidanceStage.FADE_ALL -> "Faint guide"
-    WritingGuidanceStage.FEWER_STROKES -> "Fewer strokes"
-    WritingGuidanceStage.FIRST_STROKE -> "Start cue"
-    WritingGuidanceStage.CHECK -> "Check"
+    WritingGuidanceStage.TRACE -> "Copy"
+    WritingGuidanceStage.FADE_ALL -> "Quiet guide"
+    WritingGuidanceStage.FEWER_STROKES -> "Missing strokes"
+    WritingGuidanceStage.FIRST_STROKE -> "First stroke"
+    WritingGuidanceStage.CHECK -> "From memory"
 }
 
 private fun WritingGuidanceStage.next(guideStrokeCount: Int): WritingGuidanceStage = when (this) {
@@ -185,11 +186,11 @@ private fun stageAdvanceButtonText(
     stage: WritingGuidanceStage,
     guideStrokeCount: Int,
 ): String = when (stage.next(guideStrokeCount)) {
-    WritingGuidanceStage.TRACE -> "Trace"
-    WritingGuidanceStage.FADE_ALL -> "Fade guide"
-    WritingGuidanceStage.FEWER_STROKES -> "Take away strokes"
-    WritingGuidanceStage.FIRST_STROKE -> "First stroke only"
-    WritingGuidanceStage.CHECK -> "Clear and check"
+    WritingGuidanceStage.TRACE -> "Copy again"
+    WritingGuidanceStage.FADE_ALL -> "Make guide quieter"
+    WritingGuidanceStage.FEWER_STROKES -> "Hide some strokes"
+    WritingGuidanceStage.FIRST_STROKE -> "Only show the start"
+    WritingGuidanceStage.CHECK -> "Try from memory"
 }
 
 @Composable
@@ -271,37 +272,55 @@ private fun OnboardingScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "A writing-first Thai beginner path. Learn a tiny set of useful symbols, write real words early, then let spaced repetition bring them back at the right time.",
+                    text = "Learn Thai by writing it. Start with a tiny set of symbols, use them in real words, then review them before they fade.",
                     style = MaterialTheme.typography.bodyLarge,
                 )
             }
             item {
-                FeatureCard(
-                    title = "Baby steps only",
-                    body = "The course starts with small symbol batches and useful words like มา, บ้าน, แม่, ไป, and น้ำ instead of marching through the official alphabet first.",
+                Button(
+                    enabled = !uiState.busy,
+                    onClick = {
+                        val (hour, minute) = presets[reminderChoice]
+                        onFinish(hour, minute)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Start learning")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Handwriting feedback, audio, and reminders can all be adjusted later from Progress.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Clay,
                 )
             }
             item {
                 FeatureCard(
-                    title = "Handwriting checks on device",
+                    title = "Useful Thai first",
+                    body = "You start with small symbol batches and words like มา, บ้าน, แม่, ไป, and น้ำ instead of memorizing the official alphabet order on day one.",
+                )
+            }
+            item {
+                FeatureCard(
+                    title = "Optional handwriting feedback",
                     body = if (uiState.handwritingModelReady) {
-                        "Thai handwriting model is ready."
+                        "Automatic Thai handwriting feedback is ready."
                     } else {
-                        "Download the Thai handwriting model once so the app can auto-check what you write."
+                        "Download the Thai handwriting model for automatic feedback, or start now and check your writing yourself."
                     },
                     action = {
                         Button(
                             enabled = !uiState.busy,
                             onClick = { onDownloadModel(false) },
                         ) {
-                            Text(if (uiState.handwritingModelReady) "Redownload model" else "Download model")
+                            Text(if (uiState.handwritingModelReady) "Redownload feedback" else "Download feedback")
                         }
                     },
                 )
             }
             item {
                 FeatureCard(
-                    title = "Audio cards",
+                    title = "Optional Thai audio",
                     body = uiState.thaiAudioStatus,
                     action = {
                         FlowRow(
@@ -310,7 +329,7 @@ private fun OnboardingScreen(
                         ) {
                             if (!uiState.thaiAudioReady) {
                                 OutlinedButton(onClick = onOpenThaiAudioSetup) {
-                                    Text("Fix audio")
+                                    Text("Set up audio")
                                 }
                             }
                             TextButton(onClick = onRefreshSupportState) {
@@ -325,7 +344,7 @@ private fun OnboardingScreen(
             }
             item {
                 Text(
-                    text = "Daily reminder",
+                    text = "Practice reminder",
                     style = MaterialTheme.typography.titleLarge,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -353,7 +372,7 @@ private fun OnboardingScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (uiState.handwritingModelReady) "Start learning" else "Start with manual checks")
+                    Text("Start with this reminder")
                 }
             }
         }
@@ -524,9 +543,9 @@ private fun HomeScreen(
                 ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFFFF9F2))) {
                     Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Study streak", style = MaterialTheme.typography.labelLarge, color = Palm)
-                        Text("${snapshot.streak} days", style = MaterialTheme.typography.headlineMedium)
+                        Text(dayCountLabel(snapshot.streak), style = MaterialTheme.typography.headlineMedium)
                         Text(
-                            "${snapshot.dueCards.size} review cards due now. Best streak so far: ${snapshot.maxStreak}.",
+                            "${snapshot.dueCards.size} Thai prompts due now. Best streak so far: ${dayCountLabel(snapshot.maxStreak)}.",
                             style = MaterialTheme.typography.bodyLarge,
                         )
                     }
@@ -535,7 +554,7 @@ private fun HomeScreen(
             item {
                 FeatureCard(
                     title = "Learning path",
-                    body = "${snapshot.startedLessonCount}/${snapshot.lessons.size} lessons opened, ${snapshot.completedLessonCount} completed, and ${snapshot.masteredWritingCount}/${snapshot.totalWritingCount} writing targets are in long-term review.",
+                    body = "${snapshot.startedLessonCount}/${snapshot.lessons.size} lessons opened, ${snapshot.completedLessonCount} completed, and ${snapshot.masteredWritingCount}/${snapshot.totalWritingCount} Thai shapes are stable.",
                 )
             }
             item {
@@ -647,8 +666,8 @@ private fun LessonScreen(
                     accent = accent,
                     badge = "${overview.requiredMasteredCount}/${overview.requiredTotalCount} required stable",
                     detail = if (overview.unlocked) {
-                        val nextDue = overview.nextDueWritingAtMillis?.let { " Next writing review is due ${formatDueTime(it)}." } ?: ""
-                        "${overview.dueCount} cards from this lesson are already circulating in review.$nextDue"
+                        val nextDue = overview.nextDueWritingAtMillis?.let { " Next writing practice is due ${formatDueTime(it)}." } ?: ""
+                        "${overview.dueCount} prompts from this lesson are waiting or already in review.$nextDue"
                     } else {
                         "This lesson stays locked until the previous batch is stable."
                     },
@@ -721,15 +740,15 @@ private fun LessonScreen(
             }
             item {
                 StudyPanel(borderColor = accent.copy(alpha = 0.16f)) {
-                    Text("Ready to write?", style = MaterialTheme.typography.titleLarge, color = Ink)
+                    Text("Ready to learn by writing?", style = MaterialTheme.typography.titleLarge, color = Ink)
                     Text(
-                        "Starting this lesson creates only the writing cards. After a first good writing pass, the recall card appears, and audio waits until recall succeeds.",
+                        "Start by copying each Thai shape. After your first good writing pass, the app brings the same Thai back for memory and listening practice.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = StudySlate,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "The next lesson still unlocks from writing stability, so you may need a short follow-up review later before the next batch opens.",
+                        "The next small batch unlocks only after the required writing feels stable.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Clay,
                     )
@@ -740,7 +759,7 @@ private fun LessonScreen(
                         shape = RoundedCornerShape(22.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = accent),
                     ) {
-                        Text(if (overview.started) "Continue lesson drill" else "Start lesson drill")
+                        Text(if (overview.started) "Keep writing this lesson" else "Start writing")
                     }
                 }
             }
@@ -808,7 +827,7 @@ private fun PracticeScreen(
 
     StudyScreenScaffold(
         title = overview.lesson.title,
-        subtitle = "Lesson drill",
+        subtitle = "Lesson writing",
         onBack = onBack,
     ) { padding ->
         if (current == null) {
@@ -840,15 +859,15 @@ private fun PracticeScreen(
                     modifier = Modifier.padding(horizontal = 20.dp),
                     borderColor = accent.copy(alpha = 0.16f),
                 ) {
-                    Text("No scored writing due", style = MaterialTheme.typography.titleLarge, color = Ink)
+                    Text("Nothing due to save", style = MaterialTheme.typography.titleLarge, color = Ink)
                     Text(
-                        overview.nextDueWritingAtMillis?.let { "The next writing review for this lesson is due ${formatDueTime(it)}." }
-                            ?: "This lesson has no scored writing card waiting right now.",
+                        overview.nextDueWritingAtMillis?.let { "The next saved writing try for this lesson is due ${formatDueTime(it)}." }
+                            ?: "This lesson has no writing prompt waiting right now.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = StudySlate,
                     )
                     Text(
-                        "Free practice will not write a review log.",
+                        "Free practice lets you rehearse Thai without changing your review schedule.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Clay,
                     )
@@ -885,13 +904,21 @@ private fun PracticeScreen(
                     label = "${overview.lesson.stage} practice",
                     title = current.item.prompt,
                     body = if (correctionOnly) {
-                        "Practice pass for item ${index + 1}. The review was already saved, so this part is just for rebuilding the shape."
+                        "Extra practice for item ${index + 1}. Your review is already saved, so this part is only for rebuilding the shape."
                     } else {
                         "Item ${index + 1} of ${overview.items.size}. ${writingStagePracticeBody(guidanceStage, dueWritingCard != null)}"
                     },
                     accent = accent,
                     badge = "${index + 1}/${overview.items.size}",
-                    detail = writingTarget?.supportText ?: supportTip ?: "Trace, fade, remove cues, then check a fresh attempt.",
+                    detail = writingTarget?.supportText ?: supportTip ?: "Copy, hide cues, then try once from memory.",
+                )
+            }
+            item {
+                LearningTargetPanel(
+                    item = current.item,
+                    accent = accent,
+                    showThai = guideVisible || correctionOnly,
+                    label = if (guideVisible || correctionOnly) "What to copy" else "Write from memory",
                 )
             }
             item {
@@ -910,16 +937,16 @@ private fun PracticeScreen(
                         background = StudyMintTint,
                     )
                     StudyInlinePill(
-                        text = if (showHint) "Hint open" else "Hint hidden",
+                        text = if (showHint) "Hint shown" else "Hint off",
                         tint = if (showHint) Clay else StudySlate,
                         background = if (showHint) Color(0xFFFFF1E4) else Color(0xFFF7F2EB),
                     )
                     StudyInlinePill(
                         text = when {
-                            correctionOnly -> "Practice only"
-                            dueWritingCard != null && isCheckStage -> "Ready to score"
-                            dueWritingCard != null -> "Scores in Check"
-                            else -> "Practice only"
+                            correctionOnly -> "Review saved"
+                            dueWritingCard != null && isCheckStage -> "Can save now"
+                            dueWritingCard != null -> "Practice first"
+                            else -> "Practice step"
                         },
                         tint = if (dueWritingCard != null && isCheckStage && !correctionOnly) Palm else StudySlate,
                         background = if (dueWritingCard != null && isCheckStage && !correctionOnly) StudyMintTint else Color(0xFFF7F2EB),
@@ -1005,7 +1032,7 @@ private fun PracticeScreen(
                 if (!isCheckStage) {
                     item {
                         Text(
-                            "This is guided practice. The canvas will clear before Check so only a fresh unguided try can be submitted.",
+                            "This is guided practice. The canvas clears before the memory try so only fresh writing can be saved.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Clay,
                         )
@@ -1024,7 +1051,7 @@ private fun PracticeScreen(
                 } else if (scoringCard != null && !handwritingModelReady) {
                     item {
                         Text(
-                            "Score this unguided writing try yourself. The model can be downloaded later from Profile.",
+                            "Check this memory try yourself. You can download automatic handwriting feedback later from Progress.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Clay,
                         )
@@ -1057,7 +1084,7 @@ private fun PracticeScreen(
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(22.dp),
                             ) {
-                                Text("Need practice")
+                                Text("Not yet")
                             }
                             Button(
                                 onClick = {
@@ -1080,14 +1107,14 @@ private fun PracticeScreen(
                                 shape = RoundedCornerShape(22.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = accent),
                             ) {
-                                Text("Got it")
+                                Text("Looks right")
                             }
                         }
                     }
                 } else if (!handwritingModelReady) {
                     item {
                         Text(
-                            "This practice pass is not scored because the handwriting model is missing.",
+                            "This practice pass is not saved because automatic handwriting feedback is not installed.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Clay,
                         )
@@ -1144,7 +1171,7 @@ private fun PracticeScreen(
                                 }
                             },
                         ) {
-                            Text(if (checking) "Checking..." else "Check writing")
+                            Text(if (checking) "Checking..." else "Check my writing")
                         }
                     }
                 }
@@ -1180,7 +1207,7 @@ private fun PracticeScreen(
                     ) {
                         Text(
                             when {
-                                assessment.passed -> "Next item"
+                                assessment.passed -> "Next"
                                 assessment.reviewRecorded -> "Practice with guide"
                                 else -> "Reset and try again"
                             },
@@ -1275,7 +1302,7 @@ private fun ReviewScreen(
     }
 
     StudyScreenScaffold(
-        title = "Review queue",
+        title = "Today's review",
         subtitle = "Due now",
         onBack = onBack,
     ) { padding ->
@@ -1287,8 +1314,8 @@ private fun ReviewScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 StudyCompletionCard(
-                    title = "Queue clear",
-                    body = "Nothing is due right now. Leave the review screen and come back when the next batch surfaces.",
+                    title = "Review done",
+                    body = "Nothing is due right now. Study a new small set or come back when Thai prompts return.",
                     buttonText = "Back to study",
                     accent = Palm,
                     onClick = onBack,
@@ -1314,9 +1341,19 @@ private fun ReviewScreen(
                     detail = if (current.requiresWriting) {
                         writingTarget?.supportText ?: supportTip ?: "Write the Thai answer before you check it."
                     } else {
-                        "Reveal only after you have genuinely tried to recall it."
+                        "Show the Thai only after you have genuinely tried to remember it."
                     },
                 )
+            }
+            if (current.requiresWriting) {
+                item {
+                    LearningTargetPanel(
+                        item = current.item,
+                        accent = accent,
+                        showThai = guideVisible || correctionOnly,
+                        label = if (guideVisible || correctionOnly) "What to copy" else "Write from memory",
+                    )
+                }
             }
             item {
                 FlowRow(
@@ -1324,7 +1361,7 @@ private fun ReviewScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     StudyInlinePill(
-                        text = "${snapshot.dueRecognitionCount} recall",
+                        text = "${snapshot.dueRecognitionCount} memory",
                         tint = Palm,
                         background = StudyMintTint,
                     )
@@ -1334,7 +1371,7 @@ private fun ReviewScreen(
                         background = Color(0xFFFFF1E4),
                     )
                     StudyInlinePill(
-                        text = "${snapshot.dueAudioCount} audio",
+                        text = "${snapshot.dueAudioCount} listening",
                         tint = StudyLavender,
                         background = StudyLavenderTint,
                     )
@@ -1439,7 +1476,7 @@ private fun ReviewScreen(
                     if (!isCheckStage) {
                         item {
                             Text(
-                                "This is guided practice. The canvas will clear before Check so the saved review uses a fresh unguided try.",
+                                "This is guided practice. The canvas clears before the memory try so saved reviews use fresh writing.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Clay,
                             )
@@ -1460,7 +1497,7 @@ private fun ReviewScreen(
                     } else if (!uiState.handwritingModelReady && reviewScoringCard != null) {
                         item {
                             Text(
-                                "Score this unguided writing try yourself. The model can be downloaded later from Profile.",
+                                "Check this memory try yourself. You can download automatic handwriting feedback later from Progress.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Clay,
                             )
@@ -1493,7 +1530,7 @@ private fun ReviewScreen(
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(22.dp),
                                 ) {
-                                    Text("Need practice")
+                                    Text("Not yet")
                                 }
                                 Button(
                                     onClick = {
@@ -1516,7 +1553,7 @@ private fun ReviewScreen(
                                     shape = RoundedCornerShape(22.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = accent),
                                 ) {
-                                    Text("Got it")
+                                    Text("Looks right")
                                 }
                             }
                         }
@@ -1575,7 +1612,7 @@ private fun ReviewScreen(
                                     }
                                 },
                             ) {
-                                Text(if (checking) "Checking..." else "Check answer")
+                                Text(if (checking) "Checking..." else "Check my writing")
                             }
                         }
                     }
@@ -1611,7 +1648,7 @@ private fun ReviewScreen(
                         ) {
                             Text(
                                 when {
-                                    assessment.passed -> "Next card"
+                                    assessment.passed -> "Next"
                                     assessment.reviewRecorded -> "Practice with guide"
                                     else -> "Reset and try again"
                                 },
@@ -1649,15 +1686,15 @@ private fun ReviewScreen(
                             } else {
                                 Text(
                                     if (current.promptMode == ReviewPromptMode.AUDIO) {
-                                        "Listen closely, say it back, and try to picture the Thai before flipping."
+                                        "Listen closely, say it back, and picture the Thai spelling before you look."
                                     } else {
-                                        "Try to recall the Thai before flipping."
+                                        "Try to remember the Thai before you look."
                                     },
                                     style = MaterialTheme.typography.bodyLarge,
                                 )
                                 if (current.promptMode == ReviewPromptMode.AUDIO) {
                                     Text(
-                                        "Use the headphones button to replay the prompt as often as you need.",
+                                        "Replay the sound as often as you need.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = Clay,
                                     )
@@ -1674,7 +1711,7 @@ private fun ReviewScreen(
                             shape = RoundedCornerShape(22.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = accent),
                         ) {
-                            Text(if (current.promptMode == ReviewPromptMode.AUDIO) "Reveal answer" else "Reveal")
+                            Text("Show Thai")
                         }
                     } else {
                         Row(
@@ -1697,7 +1734,7 @@ private fun ReviewScreen(
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(22.dp),
                             ) {
-                                Text("Missed it")
+                                Text("Not yet")
                             }
                             Button(
                                 onClick = {
@@ -1716,7 +1753,7 @@ private fun ReviewScreen(
                                 shape = RoundedCornerShape(22.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = accent),
                             ) {
-                                Text("Got it")
+                                Text("I remembered")
                             }
                         }
                     }
@@ -1771,8 +1808,8 @@ private fun SettingsScreen(
             }
             item {
                 FeatureCard(
-                    title = "Handwriting model",
-                    body = if (uiState.handwritingModelReady) "Thai model installed." else "Thai model missing.",
+                    title = "Handwriting feedback",
+                    body = if (uiState.handwritingModelReady) "Automatic feedback is installed." else "Automatic feedback is not installed yet.",
                     action = {
                         Button(onClick = { onRedownloadModel(false) }) { Text("Download") }
                     },
@@ -1847,9 +1884,9 @@ private fun LessonCard(
             Text(lesson.lesson.description, style = MaterialTheme.typography.bodyMedium)
             Text(
                 if (lesson.unlocked) {
-                    "${lesson.requiredMasteredCount}/${lesson.requiredTotalCount} required writing cards mastered, ${lesson.dueCount} due"
+                    "${lesson.requiredMasteredCount}/${lesson.requiredTotalCount} required Thai shapes stable, ${lesson.dueCount} due"
                 } else {
-                    "Locked until the previous lesson is mastered"
+                    "Locked until the previous lesson feels stable"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (lesson.unlocked) Ink else Clay,
@@ -1939,11 +1976,11 @@ private fun NotificationPermissionCard() {
     }
 
     FeatureCard(
-        title = "Notifications",
+        title = "Daily nudge",
         body = if (granted) {
-            "Daily reminder notifications can appear on this device."
+            "Daily practice reminders can appear on this device."
         } else {
-            "Android still needs notification permission before daily review reminders can appear."
+            "Android needs notification permission before practice reminders can appear."
         },
         action = if (!granted && Build.VERSION.SDK_INT >= 33) {
             {
@@ -1966,6 +2003,8 @@ private fun notificationPermissionGranted(context: Context): Boolean {
         Manifest.permission.POST_NOTIFICATIONS,
     ) == PackageManager.PERMISSION_GRANTED
 }
+
+private fun dayCountLabel(count: Int): String = if (count == 1) "1 day" else "$count days"
 
 @Composable
 private fun StudyScreenScaffold(
@@ -2082,6 +2121,55 @@ private fun StudyInlinePill(
             style = MaterialTheme.typography.bodyMedium,
             color = tint,
         )
+    }
+}
+
+@Composable
+private fun LearningTargetPanel(
+    item: StudyItemSeed,
+    accent: Color,
+    showThai: Boolean,
+    label: String,
+) {
+    StudyPanel(
+        borderColor = accent.copy(alpha = 0.16f),
+        contentPadding = PaddingValues(18.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = accent)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(92.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(accent.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (showThai) item.thai else "?",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Ink,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(item.transliteration, style = MaterialTheme.typography.titleLarge, color = Ink)
+                Text(item.english, style = MaterialTheme.typography.bodyLarge, color = StudySlate)
+                if (!showThai) {
+                    Text(
+                        "The Thai is hidden here. Write it from memory, then check.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Clay,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -2235,9 +2323,9 @@ private fun reviewAccent(mode: ReviewPromptMode): Color = when (mode) {
 }
 
 private fun reviewModeLabel(mode: ReviewPromptMode): String = when (mode) {
-    ReviewPromptMode.RECOGNITION -> "Recall card"
-    ReviewPromptMode.WRITING -> "Writing card"
-    ReviewPromptMode.AUDIO -> "Audio card"
+    ReviewPromptMode.RECOGNITION -> "Remember"
+    ReviewPromptMode.WRITING -> "Write"
+    ReviewPromptMode.AUDIO -> "Listen"
 }
 
 private fun writingStagePracticeBody(
@@ -2245,18 +2333,18 @@ private fun writingStagePracticeBody(
     hasDueWriting: Boolean,
 ): String = when (stage) {
     WritingGuidanceStage.TRACE ->
-        "Trace the full stroke order first. Nothing is scored yet."
+        "Copy the full stroke order first. Nothing is saved yet."
     WritingGuidanceStage.FADE_ALL ->
-        "Use the faint full guide as a quieter reference before any strokes disappear."
+        "Use the quieter guide, then try the shape from memory."
     WritingGuidanceStage.FEWER_STROKES ->
         "Only the early strokes stay visible. Fill in the missing parts from memory."
     WritingGuidanceStage.FIRST_STROKE ->
         "Use just the starting cue, then finish the shape yourself."
     WritingGuidanceStage.CHECK ->
         if (hasDueWriting) {
-            "Write without the guide on a clean canvas. This is the only stage that can save the review."
+            "Write without the guide on a clean canvas. Only this memory try is saved."
         } else {
-            "Write without the guide on a clean canvas. This check is practice only."
+            "Write without the guide on a clean canvas. This is practice only."
         }
 }
 
@@ -2264,13 +2352,13 @@ private fun writingStageTitle(
     stage: WritingGuidanceStage,
     correctionOnly: Boolean,
 ): String = when {
-    correctionOnly && stage == WritingGuidanceStage.CHECK -> "Try without guide"
+    correctionOnly && stage == WritingGuidanceStage.CHECK -> "Try from memory"
     correctionOnly -> "Guided correction"
-    stage == WritingGuidanceStage.TRACE -> "Trace the shape"
-    stage == WritingGuidanceStage.FADE_ALL -> "Fade the guide"
-    stage == WritingGuidanceStage.FEWER_STROKES -> "Fewer strokes"
-    stage == WritingGuidanceStage.FIRST_STROKE -> "Start cue only"
-    else -> "Check without guide"
+    stage == WritingGuidanceStage.TRACE -> "Copy the shape"
+    stage == WritingGuidanceStage.FADE_ALL -> "Quieter guide"
+    stage == WritingGuidanceStage.FEWER_STROKES -> "Missing strokes"
+    stage == WritingGuidanceStage.FIRST_STROKE -> "First stroke only"
+    else -> "Memory try"
 }
 
 private fun writingStageCanvasBody(
@@ -2278,28 +2366,28 @@ private fun writingStageCanvasBody(
     correctionOnly: Boolean,
 ): String = when {
     correctionOnly && stage == WritingGuidanceStage.CHECK ->
-        "This pass is still practice only. The guide is hidden so you can test the shape before continuing."
+        "This is still practice only. The guide is hidden so you can test the shape before continuing."
     correctionOnly ->
-        "This pass is practice only. Work through the guide again, then continue when the shape feels familiar."
+        "Work through the guide again, then continue when the shape feels familiar."
     stage == WritingGuidanceStage.TRACE ->
-        "Write over the numbered guide slowly. This stage never saves a review."
+        "Write over the numbered guide slowly. This stage never saves a result."
     stage == WritingGuidanceStage.FADE_ALL ->
-        "Use the full guide as a quiet reference. The next stage removes some of it when stroke data is available."
+        "Use the full guide as a quiet reference. When you are ready, try it from memory."
     stage == WritingGuidanceStage.FEWER_STROKES ->
         "Follow the remaining early strokes, then complete the hidden strokes yourself."
     stage == WritingGuidanceStage.FIRST_STROKE ->
         "Use the first stroke marker to start in the right place, then finish from memory."
     else ->
-        "The guide is hidden. Submit only this fresh unguided attempt."
+        "The guide is hidden. Check only this fresh memory attempt."
 }
 
 private fun reviewModeBody(card: com.bee.thaiwrite.data.repo.ReviewCardView): String = when (card.promptMode) {
     ReviewPromptMode.RECOGNITION ->
-        "Try to recall the Thai before revealing it. Score yourself only after you have genuinely tried."
+        "Try to remember the Thai before showing it. Score yourself only after you have really tried."
     ReviewPromptMode.WRITING ->
         writingStagePracticeBody(initialWritingGuidanceStage(card.card.state), hasDueWriting = true)
     ReviewPromptMode.AUDIO ->
-        "Listen, say it back, and picture the Thai before flipping the answer."
+        "Listen, say it back, and picture the Thai before showing the answer."
 }
 
 @Composable
@@ -2314,18 +2402,18 @@ private fun FeedbackCard(
         contentPadding = PaddingValues(18.dp),
     ) {
         StudyInlinePill(
-            text = if (passed) "Recognized" else "Needs another pass",
+            text = if (passed) "Good enough" else "Try once more",
             tint = if (passed) Palm else Clay,
             background = if (passed) Color(0xFFE7F4E4) else Color(0xFFFCE7E3),
         )
         Text(
-            if (passed) "That answer is good enough to move on." else "The recognizer did not get a clean match yet.",
+            if (passed) "Your Thai was close enough to move on." else "The recognizer did not get a clean match yet.",
             style = MaterialTheme.typography.titleLarge,
             color = Ink,
         )
         Text("Expected: $expected", style = MaterialTheme.typography.bodyLarge, color = Ink)
         Text(
-            "Recognizer heard: ${topCandidate ?: "Nothing clear"}",
+            "Recognizer read: ${topCandidate ?: "Nothing clear"}",
             style = MaterialTheme.typography.bodyMedium,
             color = StudySlate,
         )

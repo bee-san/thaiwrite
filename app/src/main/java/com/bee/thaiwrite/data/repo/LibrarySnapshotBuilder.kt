@@ -91,7 +91,7 @@ internal fun buildLibrarySnapshot(
                 primaryPrompt = when (cardType) {
                     CardType.RECOGNITION -> if (item.type == ItemType.WORD) item.english else item.transliteration
                     CardType.WRITING -> item.prompt
-                    CardType.AUDIO_RECOGNITION -> "Listen to the Thai audio, then recall the script."
+                    CardType.AUDIO_RECOGNITION -> "Listen, then picture the Thai spelling."
                 },
                 secondaryPrompt = when (cardType) {
                     CardType.RECOGNITION -> item.audioText

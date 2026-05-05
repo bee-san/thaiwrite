@@ -26,7 +26,7 @@ data class AppUiState(
     val snapshot: LibrarySnapshot? = null,
     val handwritingModelReady: Boolean = false,
     val thaiAudioReady: Boolean = false,
-    val thaiAudioStatus: String = "Checking Thai audio...",
+    val thaiAudioStatus: String = "Checking Thai audio voice...",
     val thaiAudioEngine: String? = null,
     val updateSupported: Boolean = false,
     val updateChecking: Boolean = false,
@@ -107,7 +107,7 @@ class AppViewModel(
         runCatching {
             audioPromptPlayer.openThaiSetup()
         }.onSuccess {
-            postMessage("Open Android Text-to-speech settings, install a Thai voice, then return and tap refresh.")
+            postMessage("Open Android Text-to-speech settings, install a Thai voice, then return and refresh.")
         }.onFailure { error ->
             postMessage(error.message ?: "Unable to open Android Text-to-speech settings.")
         }
@@ -278,7 +278,7 @@ class AppViewModel(
         expectedCard: StudyCardEntity,
     ): Boolean {
         val parsedCardType = runCatching { CardType.valueOf(cardType) }.getOrElse {
-            postMessage("Unknown review card type: $cardType.")
+            postMessage("Unknown review prompt type: $cardType.")
             return false
         }
         val accepted = repository.submitRecallReview(
@@ -289,7 +289,7 @@ class AppViewModel(
             expectedCard = expectedCard,
         )
         if (!accepted) {
-            postMessage("That card is not due or was already scored. Move to the next prompt.")
+            postMessage("That prompt was already saved. Move to the next one.")
         }
         return accepted
     }
@@ -307,7 +307,7 @@ class AppViewModel(
             expectedCard = expectedCard,
         )
         if (!accepted) {
-            postMessage("That card is not due or was already scored. Move to the next prompt.")
+            postMessage("That writing prompt was already saved. Move to the next one.")
         }
         return accepted
     }
@@ -318,8 +318,8 @@ class AppViewModel(
         canvasWidth: Float,
         canvasHeight: Float,
     ): WritingAssessment {
-        require(strokes.any { it.isNotEmpty() }) { "Write something before checking the answer." }
-        require(canvasWidth > 0f && canvasHeight > 0f) { "The writing canvas is not ready yet. Try again." }
+        require(strokes.any { it.isNotEmpty() }) { "Write something before checking." }
+        require(canvasWidth > 0f && canvasHeight > 0f) { "The writing area is still loading. Try again." }
         val result = handwriting.recognize(
             strokes = strokes,
             width = canvasWidth,
@@ -356,7 +356,7 @@ class AppViewModel(
             responseMs = responseMs,
             expectedCard = expectedCard,
         )
-        check(accepted) { "That card is not due or was already scored. Move to the next prompt." }
+        check(accepted) { "That writing prompt was already saved. Move to the next one." }
         return result.copy(reviewRecorded = true)
     }
 

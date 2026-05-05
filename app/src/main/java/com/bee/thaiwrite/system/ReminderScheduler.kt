@@ -93,7 +93,7 @@ class StudyReminderWorker(
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("ThaiWrite")
-            .setContentText("Do one short Thai writing review to keep the streak alive.")
+            .setContentText("Write one small piece of Thai today.")
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
             .build()
