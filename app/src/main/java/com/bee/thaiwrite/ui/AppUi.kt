@@ -1250,6 +1250,7 @@ private fun ReviewScreen(
     }
     var showHint by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
     var recallSubmitting by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
+    var revealAudioPlayed by rememberSaveable(current?.item?.id, current?.card?.cardType) { mutableStateOf(false) }
     val cardMode = current?.promptMode
     val accent = current?.promptMode?.let(::reviewAccent) ?: Palm
     val isCheckStage = guidanceStage == WritingGuidanceStage.CHECK
@@ -1279,6 +1280,7 @@ private fun ReviewScreen(
         showHint = false
         checking = false
         recallSubmitting = false
+        revealAudioPlayed = false
         correctionOnly = false
         result = null
         padState.clear()
@@ -1290,9 +1292,17 @@ private fun ReviewScreen(
         showHint = false
         checking = false
         recallSubmitting = false
+        revealAudioPlayed = false
         correctionOnly = false
         result = null
         padState.clear()
+    }
+
+    LaunchedEffect(current?.item?.id, current?.card?.cardType, revealed) {
+        if (current != null && current.promptMode == ReviewPromptMode.RECOGNITION && revealed && !revealAudioPlayed) {
+            revealAudioPlayed = true
+            viewModel.playAudio(current.item.audioText)
+        }
     }
 
     LaunchedEffect(current?.item?.id, current?.card?.cardType, cardMode) {
@@ -1334,15 +1344,11 @@ private fun ReviewScreen(
             item {
                 StudyHeroCard(
                     label = reviewModeLabel(current.promptMode),
-                    title = current.primaryPrompt,
-                    body = reviewModeBody(current),
+                    title = reviewHeroTitle(current, revealed),
+                    body = reviewModeBody(current, revealed),
                     accent = accent,
                     badge = "${snapshot.dueCards.size} due",
-                    detail = if (current.requiresWriting) {
-                        writingTarget?.supportText ?: supportTip ?: "Write the Thai answer before you check it."
-                    } else {
-                        "Show the Thai only after you have genuinely tried to remember it."
-                    },
+                    detail = reviewModeDetail(current, writingTarget?.supportText ?: supportTip),
                 )
             }
             if (current.requiresWriting) {
@@ -1396,11 +1402,13 @@ private fun ReviewScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    OutlinedButton(
-                        onClick = { scope.launch { viewModel.playAudio(current.item.audioText) } },
-                        shape = RoundedCornerShape(20.dp),
-                    ) {
-                        Text(if (current.promptMode == ReviewPromptMode.AUDIO) "Replay prompt" else "Play audio")
+                    if (current.promptMode == ReviewPromptMode.AUDIO || revealed) {
+                        OutlinedButton(
+                            onClick = { scope.launch { viewModel.playAudio(current.item.audioText) } },
+                            shape = RoundedCornerShape(20.dp),
+                        ) {
+                            Text(if (current.promptMode == ReviewPromptMode.AUDIO) "Replay prompt" else "Replay audio")
+                        }
                     }
                     if (current.requiresWriting) {
                         OutlinedButton(onClick = { showHint = !showHint }, shape = RoundedCornerShape(20.dp)) {
@@ -1658,12 +1666,39 @@ private fun ReviewScreen(
                 }
             } else {
                 item {
-                    StudyPanel(
-                        borderColor = accent.copy(alpha = 0.16f),
-                        contentPadding = PaddingValues(24.dp),
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            if (revealed) {
+                StudyPanel(
+                    borderColor = accent.copy(alpha = 0.16f),
+                    contentPadding = PaddingValues(24.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        when {
+                            current.promptMode == ReviewPromptMode.RECOGNITION && !revealed -> {
+                                Text(
+                                    "Read the Thai and recall the English.",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                            }
+                            current.promptMode == ReviewPromptMode.RECOGNITION -> {
+                                Text(
+                                    current.item.english,
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    color = Ink,
+                                )
+                                Text(current.item.transliteration, style = MaterialTheme.typography.titleLarge, color = accent)
+                                supportTip?.let {
+                                    Text(it, style = MaterialTheme.typography.bodyMedium, color = Clay)
+                                }
+                                if (guideTip != null && guideTip != supportTip) {
+                                    Text(guideTip, style = MaterialTheme.typography.bodyMedium, color = StudySlate)
+                                }
+                                if (current.breakdown.isNotEmpty()) {
+                                    WordBreakdownBlock(
+                                        breakdown = current.breakdown,
+                                        accent = accent,
+                                    )
+                                }
+                            }
+                            revealed -> {
                                 Text(
                                     current.item.thai,
                                     style = MaterialTheme.typography.headlineLarge,
@@ -1683,7 +1718,8 @@ private fun ReviewScreen(
                                         accent = accent,
                                     )
                                 }
-                            } else {
+                            }
+                            else -> {
                                 Text(
                                     if (current.promptMode == ReviewPromptMode.AUDIO) {
                                         "Listen closely, say it back, and picture the Thai spelling before you look."
@@ -1702,8 +1738,7 @@ private fun ReviewScreen(
                             }
                         }
                     }
-                }
-                item {
+                    Spacer(modifier = Modifier.height(18.dp))
                     if (!revealed) {
                         Button(
                             onClick = { revealed = true },
@@ -1711,7 +1746,7 @@ private fun ReviewScreen(
                             shape = RoundedCornerShape(22.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = accent),
                         ) {
-                            Text("Show Thai")
+                            Text(if (current.promptMode == ReviewPromptMode.RECOGNITION) "Show answer" else "Show Thai")
                         }
                     } else {
                         Row(
@@ -1757,10 +1792,11 @@ private fun ReviewScreen(
                             }
                         }
                     }
-                }
             }
         }
     }
+}
+}
 }
 
 @Composable
@@ -2381,13 +2417,37 @@ private fun writingStageCanvasBody(
         "The guide is hidden. Check only this fresh memory attempt."
 }
 
-private fun reviewModeBody(card: com.bee.thaiwrite.data.repo.ReviewCardView): String = when (card.promptMode) {
+internal fun reviewHeroTitle(
+    card: com.bee.thaiwrite.data.repo.ReviewCardView,
+    revealed: Boolean,
+): String = when {
+    card.promptMode == ReviewPromptMode.RECOGNITION && revealed -> card.secondaryPrompt
+    else -> card.primaryPrompt
+}
+
+internal fun reviewModeBody(
+    card: com.bee.thaiwrite.data.repo.ReviewCardView,
+    revealed: Boolean,
+): String = when (card.promptMode) {
     ReviewPromptMode.RECOGNITION ->
-        "Try to remember the Thai before showing it. Score yourself only after you have really tried."
+        if (revealed) {
+            "English answer shown. Replay the audio if you need it."
+        } else {
+            "Read the Thai and recall the English before you reveal the answer."
+        }
     ReviewPromptMode.WRITING ->
         writingStagePracticeBody(initialWritingGuidanceStage(card.card.state), hasDueWriting = true)
     ReviewPromptMode.AUDIO ->
         "Listen, say it back, and picture the Thai before showing the answer."
+}
+
+private fun reviewModeDetail(
+    card: com.bee.thaiwrite.data.repo.ReviewCardView,
+    supportText: String?,
+): String = when {
+    card.requiresWriting -> supportText ?: "Write the Thai answer before you check it."
+    card.promptMode == ReviewPromptMode.RECOGNITION -> "Read the Thai, then check the English answer."
+    else -> "Listen first, then check the Thai spelling."
 }
 
 @Composable

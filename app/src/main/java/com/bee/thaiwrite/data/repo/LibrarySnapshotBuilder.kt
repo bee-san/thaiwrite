@@ -89,12 +89,12 @@ internal fun buildLibrarySnapshot(
                     CardType.AUDIO_RECOGNITION -> ReviewPromptMode.AUDIO
                 },
                 primaryPrompt = when (cardType) {
-                    CardType.RECOGNITION -> if (item.type == ItemType.WORD) item.english else item.transliteration
+                    CardType.RECOGNITION -> item.thai
                     CardType.WRITING -> item.prompt
                     CardType.AUDIO_RECOGNITION -> "Listen, then picture the Thai spelling."
                 },
                 secondaryPrompt = when (cardType) {
-                    CardType.RECOGNITION -> item.audioText
+                    CardType.RECOGNITION -> item.english
                     CardType.WRITING -> item.transliteration
                     CardType.AUDIO_RECOGNITION -> if (item.type == ItemType.WORD) item.english else item.transliteration
                 },

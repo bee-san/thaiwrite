@@ -156,7 +156,7 @@ class LibrarySnapshotBuilderTest {
         assertEquals(1, snapshot.startedLessonCount)
         assertTrue(snapshot.modelDownloaded)
         assertEquals(listOf(mae), snapshot.usefulWords)
-        assertEquals("mother", snapshot.dueCards.first { it.card.cardType == CardType.RECOGNITION.name }.primaryPrompt)
+        assertEquals("แม่", snapshot.dueCards.first { it.card.cardType == CardType.RECOGNITION.name }.primaryPrompt)
     }
 
     @Test
@@ -258,8 +258,8 @@ class LibrarySnapshotBuilderTest {
         val writing = snapshot.dueCards.first { it.card.cardType == CardType.WRITING.name }
         val audio = snapshot.dueCards.first { it.card.cardType == CardType.AUDIO_RECOGNITION.name }
 
-        assertEquals("ko kai", recognition.primaryPrompt)
-        assertEquals("ก ไก่", recognition.secondaryPrompt)
+        assertEquals("ก", recognition.primaryPrompt)
+        assertEquals("chicken consonant", recognition.secondaryPrompt)
         assertFalse(recognition.requiresWriting)
         assertEquals("Write mother in Thai.", writing.primaryPrompt)
         assertEquals("mae", writing.secondaryPrompt)

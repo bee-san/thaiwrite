@@ -1252,7 +1252,14 @@ private fun DueCardPreview(card: ReviewCardView) {
                     tint = accent,
                 )
                 Text(card.primaryPrompt, style = ThaiSectionTitleStyle(), color = Ink)
-                Text(card.item.thai, style = MaterialTheme.typography.bodyLarge, color = Slate)
+                Text(
+                    when (card.promptMode) {
+                        ReviewPromptMode.RECOGNITION -> card.secondaryPrompt
+                        else -> card.item.thai
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Slate,
+                )
             }
             Box(
                 modifier = Modifier
